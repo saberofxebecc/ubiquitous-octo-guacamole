@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "name": "saberofxebecc's Valenced Plugins",
+  "description": "Custom plugins for Valenced.",
+  "plugins": {
+    "dev.saberofxebecc.role-color-everywhere": {
+      "name": "Role Color Everywhere",
+      "description": "Adds top role colors (including gradients) anywhere possible on Discord mobile.",
+      "author": "saberofxebecc",
+      "icon": "WrenchIcon",
+      "channels": {
+        "latest": "0.1.0"
+      },
+      "versions": {
+        "0.1.0": {
+          "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.role-color-everywhere@0.1.0.zip",
+          "sha256": "d6c6eb9c97baa59dfef97f047ae3edc5ab2805badf4ceb31bf9dbe2cb95b3af5",
+          "size": 4620,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        }
+      }
+    }
+  }
+}
