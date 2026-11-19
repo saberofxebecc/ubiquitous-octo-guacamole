@@ -1,4 +1,5 @@
-import { cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react'
+import { type ReactElement, type ReactNode } from 'react'
+import { React } from '@valenced/react'
 import { instead } from '@valenced/patcher'
 import { insteadJSX } from '@valenced/react/jsx-runtime'
 
@@ -85,14 +86,14 @@ export function mapReactElements(
         return changed ? next : node
     }
 
-    if (!isValidElement(node)) return node
+    if (!React.isValidElement(node)) return node
 
     let current: ReactElement<any> = node
     const children = (current.props as any)?.children
     if (children !== undefined) {
         const mappedChildren = mapReactElements(children, mapper)
         if (mappedChildren !== children) {
-            current = cloneElement(current, undefined, mappedChildren)
+            current = React.cloneElement(current, undefined, mappedChildren)
         }
     }
 
@@ -102,7 +103,7 @@ export function mapReactElements(
 export function applyTextColor(el: ReactElement<any>, color: string): ReactElement<any> {
     const props = el.props ?? {}
     const existingStyle = props.style
-    return cloneElement(el, {
+    return React.cloneElement(el, {
         style: existingStyle ? [existingStyle, { color }] : { color },
     })
 }

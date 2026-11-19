@@ -2,11 +2,11 @@ import { lookupModule } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
 import type { ColorData, RoleColorInts, RoleColorStrings } from '../types'
 import {
-    ChannelStore,
-    GuildMemberStore,
-    GuildRoleStore,
-    GuildStore,
-    ThemeStore,
+    getChannelStore,
+    getGuildMemberStore,
+    getGuildRoleStore,
+    getGuildStore,
+    getThemeStore,
 } from './stores'
 
 let cachedProcessColorStrings: ((cs: RoleColorStrings) => RoleColorInts) | null | undefined
@@ -52,7 +52,7 @@ export function mixWithBaseTextColor(roleHex: string, saturationPct: number): nu
     const rgb = parseHexRgb(roleHex)
     if (!rgb) return undefined
 
-    const theme = ThemeStore?.theme ?? 'dark'
+    const theme = getThemeStore()?.theme ?? 'dark'
     const isLight = theme === 'light'
     const base: [number, number, number] = isLight ? [49, 51, 56] : [219, 222, 225]
 
@@ -66,14 +66,14 @@ export function mixWithBaseTextColor(roleHex: string, saturationPct: number): nu
 
 export function getGuildId(channelOrGuildId?: string): string | undefined {
     if (!channelOrGuildId) return undefined
-    const channel = ChannelStore?.getChannel?.(channelOrGuildId)
+    const channel = getChannelStore()?.getChannel?.(channelOrGuildId)
     if (channel?.guild_id) return channel.guild_id
-    const guild = GuildStore?.getGuild?.(channelOrGuildId)
+    const guild = getGuildStore()?.getGuild?.(channelOrGuildId)
     return guild?.id
 }
 
 export function hasEnhancedRoleColors(guildId: string): boolean {
-    const guild = GuildStore?.getGuild?.(guildId)
+    const guild = getGuildStore()?.getGuild?.(guildId)
     const features = guild?.features
     if (!features) return false
     return typeof features.has === 'function'
@@ -137,7 +137,7 @@ export function getMemberColorData(
     const guildId = getGuildId(channelOrGuildId)
     if (!guildId) return null
 
-    const member = GuildMemberStore?.getMember?.(guildId, userId)
+    const member = getGuildMemberStore()?.getMember?.(guildId, userId)
     if (!member) return null
 
     return buildColorData(guildId, member.colorString, member.colorStrings, skipNeutral)
@@ -149,7 +149,7 @@ export function getRoleColorData(
     skipNeutral = false,
 ): ColorData | null {
     if (!guildId || !roleId) return null
-    const role = GuildRoleStore?.getRole?.(guildId, roleId)
+    const role = getGuildRoleStore()?.getRole?.(guildId, roleId)
     if (!role) return null
 
     return buildColorData(guildId, role.colorString, role.colorStrings, skipNeutral)

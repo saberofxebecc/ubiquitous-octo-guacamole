@@ -3,7 +3,7 @@ import { withName } from '@valenced/modules/finders/filters'
 import type { RoleColorSettings } from '../types'
 import { getMemberColorData } from '../utils/colors'
 import { applyTextColor, mapReactElements, patchComponentRender } from '../utils/react'
-import { ChannelStore, SelectedChannelStore } from '../utils/stores'
+import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
 
 export function patchPollResults(
     getSettings: () => RoleColorSettings,
@@ -21,10 +21,10 @@ export function patchPollResults(
                     const channelId =
                         props?.channelId ??
                         props?.message?.channel_id ??
-                        SelectedChannelStore?.getChannelId?.()
+                        getSelectedChannelStore()?.getChannelId?.()
                     const guildId =
                         props?.guildId ??
-                        (channelId ? ChannelStore?.getChannel?.(channelId)?.guild_id : undefined)
+                        (channelId ? getChannelStore()?.getChannel?.(channelId)?.guild_id : undefined)
 
                     if (settings.debugLogs && !logged) {
                         logged = true

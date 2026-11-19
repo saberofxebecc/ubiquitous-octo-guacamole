@@ -3,7 +3,7 @@ import { withProps } from '@valenced/modules/finders/filters'
 import { after, before } from '@valenced/patcher'
 import type { RoleColorSettings } from '../types'
 import { getMemberColorData, getRoleColorData, hexToInt } from '../utils/colors'
-import { ChannelStore } from '../utils/stores'
+import { getChannelStore } from '../utils/stores'
 
 export function patchMentions(
     getSettings: () => RoleColorSettings,
@@ -22,8 +22,8 @@ export function patchMentions(
                     const channelId = result.channelId
                     const guildOrChannel =
                         result.guildId ??
-                        (channelId ? ChannelStore?.getChannel?.(channelId)?.guild_id : undefined) ??
-                        channelId
+                        (channelId ? getChannelStore()?.getChannel?.(channelId)?.guild_id : undefined)
+                    channelId
 
                     const data = getMemberColorData(userId, guildOrChannel, settings.skipNeutralColors)
                     if (data) {
@@ -46,7 +46,7 @@ export function patchMentions(
                     const channelId = result.channelId
                     const guildId =
                         result.guildId ??
-                        (channelId ? ChannelStore?.getChannel?.(channelId)?.guild_id : undefined)
+                        (channelId ? getChannelStore()?.getChannel?.(channelId)?.guild_id : undefined)
 
                     const data = getRoleColorData(guildId, roleId, settings.skipNeutralColors)
                     if (data) {

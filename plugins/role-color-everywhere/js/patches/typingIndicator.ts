@@ -3,7 +3,7 @@ import { withProps } from '@valenced/modules/finders/filters'
 import type { RoleColorSettings } from '../types'
 import { getMemberColorData } from '../utils/colors'
 import { applyTextColor, mapReactElements, patchComponentRender } from '../utils/react'
-import { ChannelStore, GuildMemberStore, SelectedChannelStore, TypingStore, UserStore } from '../utils/stores'
+import { getChannelStore, getGuildMemberStore, getSelectedChannelStore, getTypingStore, getUserStore } from '../utils/stores'
 
 export function patchTypingIndicator(
     getSettings: () => RoleColorSettings,
@@ -20,22 +20,22 @@ export function patchTypingIndicator(
                     if (!settings.typingIndicator || !result) return result
 
                     const channelId: string | undefined =
-                        props?.channel?.id ?? props?.channelId ?? SelectedChannelStore?.getChannelId?.()
+                        props?.channel?.id ?? props?.channelId ?? getSelectedChannelStore()?.getChannelId?.()
                     if (!channelId) return result
 
-                    const typingIds = TypingStore?.getTypingUsers?.(channelId) ?? {}
+                    const typingIds = getTypingStore()?.getTypingUsers?.(channelId) ?? {}
                     const userIds = Object.keys(typingIds)
                     if (userIds.length === 0) return result
 
-                    const guildId = ChannelStore?.getChannel?.(channelId)?.guild_id
+                    const guildId = getChannelStore()?.getChannel?.(channelId)?.guild_id
                     if (!guildId) return result
 
                     const nameToColor = new Map<string, string>()
                     for (const uid of userIds) {
                         const data = getMemberColorData(uid, guildId, settings.skipNeutralColors)
                         if (!data) continue
-                        const member = GuildMemberStore?.getMember?.(guildId, uid)
-                        const user = UserStore?.getUser?.(uid)
+                        const member = getGuildMemberStore()?.getMember?.(guildId, uid)
+                        const user = getUserStore()?.getUser?.(uid)
                         const candidates = [member?.nick, user?.globalName, user?.username].filter(Boolean)
                         for (const name of candidates) {
                             nameToColor.set(String(name), data.colorString)
