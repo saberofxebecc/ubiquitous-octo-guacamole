@@ -9,13 +9,26 @@
       "author": "saberofxebecc",
       "icon": "WrenchIcon",
       "channels": {
-        "latest": "0.1.0"
+        "latest": "0.1.1"
       },
       "versions": {
         "0.1.0": {
           "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.role-color-everywhere@0.1.0.zip",
           "sha256": "d6c6eb9c97baa59dfef97f047ae3edc5ab2805badf4ceb31bf9dbe2cb95b3af5",
           "size": 4620,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "0.1.1": {
+          "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.role-color-everywhere@0.1.1.zip",
+          "sha256": "5626177745bbccc0c991a781e685f6ed823645bed91297c32d051dbfe6b8c52e",
+          "size": 4633,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"
