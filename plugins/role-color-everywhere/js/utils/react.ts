@@ -3,14 +3,34 @@ import { React } from '@valenced/react'
 import { instead } from '@valenced/patcher'
 import { insteadJSX } from '@valenced/react/jsx-runtime'
 
-const wrappedFunctions = new WeakMap<(...args: any[]) => any, (props: any) => any>()
-
 export type RenderHook = (result: ReactNode, args: any[], self?: any) => ReactNode
 
+const wrappedFunctions = new WeakMap<(...args: any[]) => any, (props: any) => any>()
+const createElementTargets = new WeakMap<(...args: any[]) => any, (props: any) => any>()
+let unpatchCreateElement: (() => void) | null = null
+let activeTargetCount = 0
+
+function ensureCreateElementHook() {
+    if (unpatchCreateElement) return
+    unpatchCreateElement = instead(
+        React,
+        'createElement',
+        (args: any[], orig: (...a: any[]) => any) => {
+            const type = args[0]
+            if (typeof type === 'function') {
+                const wrapped = createElementTargets.get(type)
+                if (wrapped) {
+                    args[0] = wrapped
+                }
+            }
+            return orig(...args)
+        },
+    )
+}
+
 /**
- * Patches a React component exported either as:
- * - a direct function/memo/class export (`targetOrModule` is the component itself)
- * - or a named property on a module object (`keyOrHook` is the property name).
+ * Patches React.memo, React.forwardRef, class components, and plain function components.
+ * Function components are intercepted across both react/jsx-runtime and React.createElement.
  */
 export function patchComponentRender(
     targetOrModule: any,
@@ -49,7 +69,7 @@ export function patchComponentRender(
         )
     }
 
-    // Direct function component (e.g. module.exports = function Foo(props) {})
+    // Plain function component
     if (typeof target === 'function') {
         let wrapped = wrappedFunctions.get(target)
         if (!wrapped) {
@@ -62,24 +82,47 @@ export function patchComponentRender(
             })
             wrappedFunctions.set(target, wrapped)
         }
-        return insteadJSX(
+
+        createElementTargets.set(target, wrapped)
+        activeTargetCount++
+        ensureCreateElementHook()
+
+        const unpatchJsx = insteadJSX(
             target,
             ([, props, key]: [any, any, any?], jsx: (...a: any[]) => any) =>
                 jsx(wrapped, props, key),
         )
+
+        return () => {
+            unpatchJsx()
+            createElementTargets.delete(target)
+            activeTargetCount--
+            if (activeTargetCount <= 0 && unpatchCreateElement) {
+                unpatchCreateElement()
+                unpatchCreateElement = null
+                activeTargetCount = 0
+            }
+        }
     }
 
     return () => { }
 }
 
+/**
+ * Shallow, depth-bounded React element mapper to avoid full-tree O(N^2) overhead.
+ */
 export function mapReactElements(
     node: ReactNode,
     mapper: (el: ReactElement<any>) => ReactElement<any>,
+    maxDepth = 8,
+    depth = 0,
 ): ReactNode {
+    if (depth > maxDepth) return node
+
     if (Array.isArray(node)) {
         let changed = false
         const next = node.map(child => {
-            const mapped = mapReactElements(child, mapper)
+            const mapped = mapReactElements(child, mapper, maxDepth, depth)
             if (mapped !== child) changed = true
             return mapped
         })
@@ -89,15 +132,18 @@ export function mapReactElements(
     if (!React.isValidElement(node)) return node
 
     let current: ReactElement<any> = node
+    const mappedSelf = mapper(current)
+    current = mappedSelf
+
     const children = (current.props as any)?.children
     if (children !== undefined) {
-        const mappedChildren = mapReactElements(children, mapper)
+        const mappedChildren = mapReactElements(children, mapper, maxDepth, depth + 1)
         if (mappedChildren !== children) {
             current = React.cloneElement(current, undefined, mappedChildren)
         }
     }
 
-    return mapper(current)
+    return current
 }
 
 export function applyTextColor(el: ReactElement<any>, color: string): ReactElement<any> {
@@ -106,4 +152,30 @@ export function applyTextColor(el: ReactElement<any>, color: string): ReactEleme
     return React.cloneElement(el, {
         style: existingStyle ? [existingStyle, { color }] : { color },
     })
+}
+
+/**
+ * Wraps `renderItem` on FlatList / FlashList / FastList elements within shallow depth.
+ */
+export function wrapListRenderItem(
+    node: ReactNode,
+    transformItemResult: (rendered: ReactNode, info: any) => ReactNode,
+    maxDepth = 6,
+): ReactNode {
+    return mapReactElements(
+        node,
+        el => {
+            const renderItem = el.props?.renderItem
+            if (typeof renderItem !== 'function' || (renderItem as any).__rceWrapped) {
+                return el
+            }
+            const wrappedRenderItem = (info: any) => {
+                const row = renderItem(info)
+                return transformItemResult(row, info)
+            }
+                ; (wrappedRenderItem as any).__rceWrapped = true
+            return React.cloneElement(el, { renderItem: wrappedRenderItem })
+        },
+        maxDepth,
+    )
 }

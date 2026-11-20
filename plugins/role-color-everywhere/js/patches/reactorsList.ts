@@ -1,14 +1,15 @@
 import { getModules } from '@valenced/modules/finders'
-import { withName, withProps } from '@valenced/modules/finders/filters'
+import { withProps } from '@valenced/modules/finders/filters'
 import type { RoleColorSettings } from '../types'
 import { getMemberColorData } from '../utils/colors'
-import { applyTextColor, mapReactElements, patchComponentRender } from '../utils/react'
+import { withComponentName } from '../utils/filters'
+import { applyTextColor, mapReactElements, patchComponentRender, wrapListRenderItem } from '../utils/react'
 import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
 
-function colorReactionTree(
+function colorReactionsSheet(
+    label: string,
     result: any,
     props: any,
-    label: string,
     getSettings: () => RoleColorSettings,
     logDebug: (msg: string, data?: unknown) => void,
     loggedRef: { value: boolean },
@@ -20,7 +21,9 @@ function colorReactionTree(
         props?.channelId ??
         props?.message?.channel_id ??
         getSelectedChannelStore()?.getChannelId?.()
-    const guildId = props?.guildId ?? (channelId ? getChannelStore()?.getChannel?.(channelId)?.guild_id : undefined)
+    const guildId =
+        props?.guildId ??
+        (channelId ? getChannelStore()?.getChannel?.(channelId)?.guild_id : undefined)
 
     if (settings.debugLogs && !loggedRef.value) {
         loggedRef.value = true
@@ -33,21 +36,30 @@ function colorReactionTree(
 
     if (!guildId) return result
 
-    return mapReactElements(result, el => {
-        const rowUser = el.props?.user ?? el.props?.reactor ?? el.props?.member
-        const uid = rowUser?.id ?? el.props?.userId
-        if (uid) {
-            const data = getMemberColorData(uid, guildId, settings.skipNeutralColors)
-            if (data) {
-                return mapReactElements(el, child => {
-                    if (typeof child.props?.children === 'string' && child.props?.variant) {
-                        return applyTextColor(child, data.colorString)
-                    }
-                    return child
-                }) as typeof el
-            }
+    let loggedItem = false
+    return wrapListRenderItem(result, (row, info) => {
+        const item = info?.item
+        if (settings.debugLogs && !loggedItem && item) {
+            loggedItem = true
+            logDebug(`${label} row item`, {
+                itemKeys: typeof item === 'object' ? Object.keys(item) : typeof item,
+            })
         }
-        return el
+
+        const uid = item?.user?.id ?? item?.id ?? item?.userId ?? item?.reactor?.id
+        const data = getMemberColorData(uid, guildId, settings.skipNeutralColors)
+        if (!data) return row
+
+        return mapReactElements(
+            row,
+            el => {
+                if (typeof el.props?.children === 'string' && el.props?.variant) {
+                    return applyTextColor(el, data.colorString)
+                }
+                return el
+            },
+            5,
+        )
     })
 }
 
@@ -61,18 +73,18 @@ export function patchReactorsList(
             const loggedRef = { value: false }
             cleanup(
                 patchComponentRender(mod, 'MessageReactionsContent', (result, [props]) =>
-                    colorReactionTree(result, props, 'MessageReactionsContent', getSettings, logDebug, loggedRef),
+                    colorReactionsSheet('MessageReactionsContent', result, props, getSettings, logDebug, loggedRef),
                 ),
             )
         }),
     )
 
     cleanup(
-        getModules(withName('MessageReactions'), (mod: any) => {
+        getModules(withComponentName('MessageReactions'), (mod: any) => {
             const loggedRef = { value: false }
             cleanup(
                 patchComponentRender(mod, (result, [props]) =>
-                    colorReactionTree(result, props, 'MessageReactions', getSettings, logDebug, loggedRef),
+                    colorReactionsSheet('MessageReactions', result, props, getSettings, logDebug, loggedRef),
                 ),
             )
         }),

@@ -1,7 +1,8 @@
 import { getModules } from '@valenced/modules/finders'
-import { withName } from '@valenced/modules/finders/filters'
+import { withProps } from '@valenced/modules/finders/filters'
 import type { RoleColorSettings } from '../types'
 import { getMemberColorData } from '../utils/colors'
+import { withComponentName } from '../utils/filters'
 import { applyTextColor, mapReactElements, patchComponentRender } from '../utils/react'
 
 function resolveVoiceIds(props: any) {
@@ -17,44 +18,70 @@ function resolveVoiceIds(props: any) {
     return { userId, guildOrChannel }
 }
 
+function colorVoiceRender(
+    label: string,
+    result: any,
+    props: any,
+    getSettings: () => RoleColorSettings,
+    logDebug: (msg: string, data?: unknown) => void,
+    loggedRef: { value: boolean },
+) {
+    const settings = getSettings()
+    if (!settings.voiceUsers || !result) return result
+
+    const { userId, guildOrChannel } = resolveVoiceIds(props)
+
+    if (settings.debugLogs && !loggedRef.value) {
+        loggedRef.value = true
+        logDebug(`${label} props`, {
+            keys: props ? Object.keys(props) : [],
+            userId,
+            guildOrChannel,
+        })
+    }
+
+    const data = getMemberColorData(userId, guildOrChannel, settings.skipNeutralColors)
+    if (!data) return result
+
+    return mapReactElements(
+        result,
+        el => {
+            const text = el.props?.children
+            if (typeof text === 'string' && text.trim().length > 0 && el.props?.variant) {
+                return applyTextColor(el, data.colorString)
+            }
+            return el
+        },
+        4,
+    )
+}
+
 export function patchVoiceUsers(
     getSettings: () => RoleColorSettings,
     logDebug: (msg: string, data?: unknown) => void,
     cleanup: (...fns: (() => void)[]) => void,
 ) {
-    const targets = ['VoiceUserNameItem', 'VoiceUsersItem']
+    // 1. VoiceUserItem (17510 - React.memo)
+    cleanup(
+        getModules(withProps('getVoiceUserHeight'), (mod: any) => {
+            const loggedRef = { value: false }
+            cleanup(
+                patchComponentRender(mod, 'default', (result, [props]) =>
+                    colorVoiceRender('VoiceUserItem', result, props, getSettings, logDebug, loggedRef),
+                ),
+            )
+        }),
+    )
 
-    for (const name of targets) {
+    // 2. VoiceUserNameItem & VoiceUsersItem (17511, 17516)
+    for (const name of ['VoiceUserNameItem', 'VoiceUsersItem']) {
         cleanup(
-            getModules(withName(name), (mod: any) => {
-                let logged = false
+            getModules(withComponentName(name), (mod: any) => {
+                const loggedRef = { value: false }
                 cleanup(
-                    patchComponentRender(mod, (result, [props]) => {
-                        const settings = getSettings()
-                        if (!settings.voiceUsers || !result) return result
-
-                        const { userId, guildOrChannel } = resolveVoiceIds(props)
-
-                        if (settings.debugLogs && !logged) {
-                            logged = true
-                            logDebug(`${name} props`, {
-                                keys: props ? Object.keys(props) : [],
-                                userId,
-                                guildOrChannel,
-                            })
-                        }
-
-                        const data = getMemberColorData(userId, guildOrChannel, settings.skipNeutralColors)
-                        if (!data) return result
-
-                        return mapReactElements(result, el => {
-                            const text = el.props?.children
-                            if (typeof text === 'string' && text.trim().length > 0 && el.props?.variant) {
-                                return applyTextColor(el, data.colorString)
-                            }
-                            return el
-                        })
-                    }),
+                    patchComponentRender(mod, (result, [props]) =>
+                        colorVoiceRender(name, result, props, getSettings, logDebug, loggedRef),
+                    ),
                 )
             }),
         )

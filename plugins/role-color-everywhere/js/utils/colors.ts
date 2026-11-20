@@ -6,7 +6,6 @@ import {
     getGuildMemberStore,
     getGuildRoleStore,
     getGuildStore,
-    getThemeStore,
 } from './stores'
 
 let cachedProcessColorStrings: ((cs: RoleColorStrings) => RoleColorInts) | null | undefined
@@ -48,22 +47,6 @@ export function isNeutralColor(hex?: string | null): boolean {
     return max - min < 24 || max < 36 || min > 225
 }
 
-export function mixWithBaseTextColor(roleHex: string, saturationPct: number): number | undefined {
-    const rgb = parseHexRgb(roleHex)
-    if (!rgb) return undefined
-
-    const theme = getThemeStore()?.theme ?? 'dark'
-    const isLight = theme === 'light'
-    const base: [number, number, number] = isLight ? [49, 51, 56] : [219, 222, 225]
-
-    const t = Math.max(0, Math.min(100, saturationPct)) / 100
-    const r = Math.round(base[0] + (rgb[0] - base[0]) * t)
-    const g = Math.round(base[1] + (rgb[1] - base[1]) * t)
-    const b = Math.round(base[2] + (rgb[2] - base[2]) * t)
-
-    return ((0xff << 24) | (r << 16) | (g << 8) | b) | 0
-}
-
 export function getGuildId(channelOrGuildId?: string): string | undefined {
     if (!channelOrGuildId) return undefined
     const channel = getChannelStore()?.getChannel?.(channelOrGuildId)
@@ -97,17 +80,18 @@ function buildColorData(
         hasEnhancedRoleColors(guildId) && rawColorStrings?.secondaryColor,
     )
 
-    const colorStrings: RoleColorStrings = isGradient && rawColorStrings
-        ? {
-            primaryColor: rawColorStrings.primaryColor ?? colorString,
-            secondaryColor: rawColorStrings.secondaryColor ?? null,
-            tertiaryColor: rawColorStrings.tertiaryColor ?? null,
-        }
-        : {
-            primaryColor: colorString,
-            secondaryColor: null,
-            tertiaryColor: null,
-        }
+    const colorStrings: RoleColorStrings =
+        isGradient && rawColorStrings
+            ? {
+                primaryColor: rawColorStrings.primaryColor ?? colorString,
+                secondaryColor: rawColorStrings.secondaryColor ?? null,
+                tertiaryColor: rawColorStrings.tertiaryColor ?? null,
+            }
+            : {
+                primaryColor: colorString,
+                secondaryColor: null,
+                tertiaryColor: null,
+            }
 
     const processor = getProcessColorStrings()
     const colorInts: RoleColorInts = processor

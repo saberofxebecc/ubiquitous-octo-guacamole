@@ -1,8 +1,8 @@
 import { getModules } from '@valenced/modules/finders'
-import { withName } from '@valenced/modules/finders/filters'
 import type { RoleColorSettings } from '../types'
 import { getMemberColorData } from '../utils/colors'
-import { applyTextColor, mapReactElements, patchComponentRender } from '../utils/react'
+import { withComponentName } from '../utils/filters'
+import { applyTextColor, mapReactElements, patchComponentRender, wrapListRenderItem } from '../utils/react'
 import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
 
 export function patchPollResults(
@@ -11,7 +11,7 @@ export function patchPollResults(
     cleanup: (...fns: (() => void)[]) => void,
 ) {
     cleanup(
-        getModules(withName('PollVotesActionSheet'), (mod: any) => {
+        getModules(withComponentName('PollVotesActionSheet'), (mod: any) => {
             let logged = false
             cleanup(
                 patchComponentRender(mod, (result, [props]) => {
@@ -37,21 +37,30 @@ export function patchPollResults(
 
                     if (!guildId) return result
 
-                    return mapReactElements(result, el => {
-                        const rowUser = el.props?.user ?? el.props?.voter ?? el.props?.member
-                        const uid = rowUser?.id ?? el.props?.userId
-                        if (uid) {
-                            const data = getMemberColorData(uid, guildId, settings.skipNeutralColors)
-                            if (data) {
-                                return mapReactElements(el, child => {
-                                    if (typeof child.props?.children === 'string' && child.props?.variant) {
-                                        return applyTextColor(child, data.colorString)
-                                    }
-                                    return child
-                                }) as typeof el
-                            }
+                    let loggedItem = false
+                    return wrapListRenderItem(result, (row, info) => {
+                        const item = info?.item
+                        if (settings.debugLogs && !loggedItem && item) {
+                            loggedItem = true
+                            logDebug('PollVotesActionSheet row item', {
+                                itemKeys: typeof item === 'object' ? Object.keys(item) : typeof item,
+                            })
                         }
-                        return el
+
+                        const uid = item?.user?.id ?? item?.id ?? item?.userId ?? item?.voter?.id
+                        const data = getMemberColorData(uid, guildId, settings.skipNeutralColors)
+                        if (!data) return row
+
+                        return mapReactElements(
+                            row,
+                            el => {
+                                if (typeof el.props?.children === 'string' && el.props?.variant) {
+                                    return applyTextColor(el, data.colorString)
+                                }
+                                return el
+                            },
+                            5,
+                        )
                     })
                 }),
             )

@@ -1,23 +1,23 @@
 export interface RoleColorSettings {
     chatMentions: boolean
+    chatInputAndAutocomplete: boolean
+    searchFilters: boolean
     voiceUsers: boolean
     typingIndicator: boolean
     reactorsList: boolean
     pollResults: boolean
-    colorChatMessages: boolean
-    messageSaturation: number
     skipNeutralColors: boolean
     debugLogs: boolean
 }
 
 export const DEFAULT_SETTINGS: RoleColorSettings = {
     chatMentions: true,
+    chatInputAndAutocomplete: true,
+    searchFilters: true,
     voiceUsers: true,
     typingIndicator: true,
     reactorsList: true,
     pollResults: true,
-    colorChatMessages: false,
-    messageSaturation: 30,
     skipNeutralColors: false,
     debugLogs: false,
 }
@@ -38,7 +38,7 @@ export interface ColorData {
     guildId: string
     colorString: string
     colorInt: number
-    colorStrings?: RoleColorStrings
-    colorInts?: RoleColorInts
+    colorStrings: RoleColorStrings
+    colorInts: RoleColorInts
     isGradient: boolean
 }
