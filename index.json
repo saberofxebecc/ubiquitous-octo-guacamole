@@ -5,11 +5,11 @@
   "plugins": {
     "dev.saberofxebecc.role-color-everywhere": {
       "name": "Role Color Everywhere",
-      "description": "Adds top role colors (including gradients) anywhere possible on Discord mobile.",
-      "author": "saberofxebecc",
-      "icon": "WrenchIcon",
+      "description": "Adds top role colors anywhere possible.",
+      "author": "impala67",
+      "icon": "PaintPaletteIcon",
       "channels": {
-        "latest": "0.1.1"
+        "latest": "0.2.0"
       },
       "versions": {
         "0.1.0": {
@@ -29,6 +29,19 @@
           "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.role-color-everywhere@0.1.1.zip",
           "sha256": "5626177745bbccc0c991a781e685f6ed823645bed91297c32d051dbfe6b8c52e",
           "size": 4633,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "0.2.0": {
+          "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.role-color-everywhere@0.2.0.zip",
+          "sha256": "45ed1de0b455dbc6012a70e6d017283ea4371a63d310952901e73714a2b1ee8a",
+          "size": 5715,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"
