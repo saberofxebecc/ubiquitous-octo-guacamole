@@ -14,7 +14,16 @@ export const getGuildStore = () =>
 export const getGuildMemberStore = () =>
     Stores.GuildMemberStore as {
         getMember?: (guildId: string, userId: string) => any
+        addChangeListener?: (cb: () => void) => void
+        removeChangeListener?: (cb: () => void) => void
     }
+
+export const getGuildMemberRequesterStore = () =>
+    Stores.GuildMemberRequesterStore as
+    | {
+        requestMember?: (guildId: string, userId: string) => void
+    }
+    | undefined
 
 export const getGuildRoleStore = () =>
     Stores.GuildRoleStore as {

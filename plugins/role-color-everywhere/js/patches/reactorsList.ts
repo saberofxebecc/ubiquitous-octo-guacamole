@@ -1,92 +1,80 @@
-import { getModules } from '@valenced/modules/finders'
-import { withProps } from '@valenced/modules/finders/filters'
+import type { Context, ReactNode } from 'react'
+import { React } from '@valenced/react'
 import type { RoleColorSettings } from '../types'
-import { getMemberColorData } from '../utils/colors'
-import { withComponentName } from '../utils/filters'
-import { applyTextColor, mapReactElements, patchComponentRender, wrapListRenderItem } from '../utils/react'
-import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
+import { getColorsFromMember, getGuildId } from '../utils/colors'
+import { paintFirstDesignText } from '../utils/gradient'
+import { transformComponent } from '../utils/react'
+import { getGuildMemberRequesterStore, getGuildMemberStore } from '../utils/stores'
 
-function colorReactionsSheet(
-    label: string,
-    result: any,
-    props: any,
-    getSettings: () => RoleColorSettings,
-    logDebug: (msg: string, data?: unknown) => void,
-    loggedRef: { value: boolean },
-) {
-    const settings = getSettings()
-    if (!settings.reactorsList || !result) return result
+interface ReactionsContentProps {
+    channelId?: string
+}
 
-    const channelId =
-        props?.channelId ??
-        props?.message?.channel_id ??
-        getSelectedChannelStore()?.getChannelId?.()
-    const guildId =
-        props?.guildId ??
-        (channelId ? getChannelStore()?.getChannel?.(channelId)?.guild_id : undefined)
+interface DiscordTagProps {
+    user?: { id?: string } | null
+}
 
-    if (settings.debugLogs && !loggedRef.value) {
-        loggedRef.value = true
-        logDebug(`${label} props`, {
-            keys: props ? Object.keys(props) : [],
-            channelId,
-            guildId,
-        })
+let ReactionsGuildContext: Context<string | undefined> | null = null
+
+function getReactionsGuildContext() {
+    return (ReactionsGuildContext ??= React.createContext<string | undefined>(undefined))
+}
+
+const noopSubscribe = () => () => { }
+
+function subscribeToMembers(callback: () => void) {
+    const store = getGuildMemberStore()
+    store?.addChangeListener?.(callback)
+    return () => {
+        store?.removeChangeListener?.(callback)
     }
-
-    if (!guildId) return result
-
-    let loggedItem = false
-    return wrapListRenderItem(result, (row, info) => {
-        const item = info?.item
-        if (settings.debugLogs && !loggedItem && item) {
-            loggedItem = true
-            logDebug(`${label} row item`, {
-                itemKeys: typeof item === 'object' ? Object.keys(item) : typeof item,
-            })
-        }
-
-        const uid = item?.user?.id ?? item?.id ?? item?.userId ?? item?.reactor?.id
-        const data = getMemberColorData(uid, guildId, settings.skipNeutralColors)
-        if (!data) return row
-
-        return mapReactElements(
-            row,
-            el => {
-                if (typeof el.props?.children === 'string' && el.props?.variant) {
-                    return applyTextColor(el, data.colorString)
-                }
-                return el
-            },
-            5,
-        )
-    })
 }
 
 export function patchReactorsList(
     getSettings: () => RoleColorSettings,
-    logDebug: (msg: string, data?: unknown) => void,
+    reportError: (e: unknown) => void,
     cleanup: (...fns: (() => void)[]) => void,
 ) {
-    cleanup(
-        getModules(withProps('useReactors', 'MessageReactionsContent'), (mod: any) => {
-            const loggedRef = { value: false }
-            cleanup(
-                patchComponentRender(mod, 'MessageReactionsContent', (result, [props]) =>
-                    colorReactionsSheet('MessageReactionsContent', result, props, getSettings, logDebug, loggedRef),
-                ),
-            )
-        }),
-    )
+    const enabled = () => getSettings().reactorsList
+
+    function useColoredTag(tree: ReactNode, { user }: DiscordTagProps) {
+        const guildId = React.useContext(getReactionsGuildContext())
+        const userId = user?.id
+
+        const member = React.useSyncExternalStore(
+            guildId && userId ? subscribeToMembers : noopSubscribe,
+            () => (guildId && userId ? getGuildMemberStore()?.getMember?.(guildId, userId) : undefined),
+        )
+
+        React.useEffect(() => {
+            if (guildId && userId && !member) {
+                getGuildMemberRequesterStore()?.requestMember?.(guildId, userId)
+            }
+        }, [guildId, userId, member])
+
+        if (!guildId || !userId || !member) return tree
+
+        const data = getColorsFromMember(guildId, member, getSettings().skipNeutralColors)
+        return data ? paintFirstDesignText(tree, data) : tree
+    }
 
     cleanup(
-        getModules(withComponentName('MessageReactions'), (mod: any) => {
-            const loggedRef = { value: false }
-            cleanup(
-                patchComponentRender(mod, (result, [props]) =>
-                    colorReactionsSheet('MessageReactions', result, props, getSettings, logDebug, loggedRef),
+        transformComponent<ReactionsContentProps>(
+            'MessageReactionsContent',
+            enabled,
+            (tree, { channelId }) =>
+                React.createElement(
+                    getReactionsGuildContext().Provider as any,
+                    { value: getGuildId(channelId) },
+                    tree,
                 ),
-            )
-        }),
+            reportError,
+        ),
+        transformComponent<DiscordTagProps>(
+            'DiscordTag',
+            enabled,
+            useColoredTag,
+            reportError,
+        ),
     )
 }

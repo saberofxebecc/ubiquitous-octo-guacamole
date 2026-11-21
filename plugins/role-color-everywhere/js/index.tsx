@@ -4,6 +4,7 @@ import { Design } from '@valenced/discord/design'
 import type { PluginApi } from '@valenced/plugins/types'
 import { patchChatMessages } from './patches/chatMessages'
 import { patchMentions } from './patches/mentions'
+import { patchReactorsList } from './patches/reactorsList'
 import { patchTypingIndicator } from './patches/typingIndicator'
 import { patchVoiceUsers } from './patches/voiceUsers'
 import { DEFAULT_SETTINGS, type RoleColorSettings } from './types'
@@ -39,8 +40,9 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
         patchMentions(getSettings, logDebug, cleanup)
         patchTypingIndicator(getSettings, logDebug, cleanup)
         patchVoiceUsers(getSettings, reportError, cleanup)
+        patchReactorsList(getSettings, reportError, cleanup)
 
-        logger.log('Role Color Everywhere v0.3.0 started')
+        logger.log('Role Color Everywhere v0.4.0 started')
     },
 
     SettingsComponent({ api }: { api: PluginApi<{ jsonStorage: RoleColorSettings }> }) {
