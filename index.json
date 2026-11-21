@@ -9,7 +9,7 @@
       "author": "impala67",
       "icon": "PaintPaletteIcon",
       "channels": {
-        "latest": "0.2.0"
+        "latest": "0.2.1"
       },
       "versions": {
         "0.1.0": {
@@ -42,6 +42,19 @@
           "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.role-color-everywhere@0.2.0.zip",
           "sha256": "45ed1de0b455dbc6012a70e6d017283ea4371a63d310952901e73714a2b1ee8a",
           "size": 5715,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "0.2.1": {
+          "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.role-color-everywhere@0.2.1.zip",
+          "sha256": "e43313d506a097badec6c550e69bb2d9feac213eeef8ebf0adafc785ed44ca8a",
+          "size": 5881,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"
