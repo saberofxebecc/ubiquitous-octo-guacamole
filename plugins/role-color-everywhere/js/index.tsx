@@ -4,12 +4,9 @@ import { Design } from '@valenced/discord/design'
 import type { PluginApi } from '@valenced/plugins/types'
 import { patchChatMessages } from './patches/chatMessages'
 import { patchMentions } from './patches/mentions'
-import { patchPollResults } from './patches/pollResults'
-import { patchReactorsList } from './patches/reactorsList'
-import { patchSearchFilters } from './patches/searchFilters'
 import { patchTypingIndicator } from './patches/typingIndicator'
-import { patchVoiceUsers } from './patches/voiceUsers'
 import { DEFAULT_SETTINGS, type RoleColorSettings } from './types'
+import { initGradientComponents } from './utils/gradient'
 
 export default plugin<{ jsonStorage: RoleColorSettings }>({
     jsonStorage: {
@@ -29,15 +26,12 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
             }
         }
 
+        initGradientComponents(cleanup)
         patchChatMessages(getSettings, cleanup)
         patchMentions(getSettings, logDebug, cleanup)
-        patchSearchFilters(getSettings, logDebug, cleanup)
         patchTypingIndicator(getSettings, logDebug, cleanup)
-        patchVoiceUsers(getSettings, logDebug, cleanup)
-        patchReactorsList(getSettings, logDebug, cleanup)
-        patchPollResults(getSettings, logDebug, cleanup)
 
-        logger.log('Role Color Everywhere v0.2.0 started')
+        logger.log('Role Color Everywhere v0.2.1 started')
     },
 
     SettingsComponent({ api }: { api: PluginApi<{ jsonStorage: RoleColorSettings }> }) {
