@@ -7,13 +7,119 @@ import { after } from '@valenced/patcher'
 import type { ColorData, RoleColorSettings } from '../types'
 import { getMemberColorData } from '../utils/colors'
 import { canRenderGradients, renderColoredText } from '../utils/gradient'
-import { getGuildMemberStore } from '../utils/stores'
+import { getGuildMemberStore, getUserStore } from '../utils/stores'
 
-function isTypingTextContainer(node: any): boolean {
-    if (!React.isValidElement(node)) return false
-    const props: any = node.props
-    if (!Array.isArray(props?.children)) return false
-    return node.type === Design?.Text || typeof props?.variant === 'string'
+function buildNameEntries(
+    guildId: string,
+    typingUserIds: string[],
+    skipNeutral: boolean,
+): [string, ColorData][] {
+    const map = new Map<string, ColorData>()
+    const memberStore = getGuildMemberStore()
+    const userStore = getUserStore()
+
+    for (const uid of typingUserIds) {
+        const data = getMemberColorData(uid, guildId, skipNeutral)
+        if (!data) continue
+        const member = memberStore?.getMember?.(guildId, uid)
+        const user = userStore?.getUser?.(uid)
+        const names = [
+            member?.nick,
+            member?.nickname,
+            member?.displayName,
+            user?.globalName,
+            user?.username,
+        ]
+        for (const n of names) {
+            if (typeof n === 'string' && n.length > 0 && !map.has(n)) {
+                map.set(n, data)
+            }
+        }
+    }
+
+    return [...map.entries()].sort((a, b) => b[0].length - a[0].length)
+}
+
+function splitStringWithColoredNames(
+    text: string,
+    entries: [string, ColorData][],
+    TextComp: any,
+    baseStyle: any,
+    baseVariant: any,
+): { nodes: ReactNode[]; hasGradient: boolean } | null {
+    const matches: { index: number; len: number; name: string; data: ColorData }[] = []
+    for (const [name, data] of entries) {
+        let pos = 0
+        while (pos < text.length) {
+            const idx = text.indexOf(name, pos)
+            if (idx === -1) break
+            matches.push({ index: idx, len: name.length, name, data })
+            pos = idx + name.length
+        }
+    }
+    if (matches.length === 0) return null
+
+    matches.sort((a, b) => a.index - b.index || b.len - a.len)
+
+    const out: ReactNode[] = []
+    let cursor = 0
+    let hasGradient = false
+
+    for (const m of matches) {
+        if (m.index < cursor) continue
+        if (m.index > cursor) {
+            out.push(text.slice(cursor, m.index))
+        }
+        const nameEl = React.createElement(
+            TextComp,
+            { key: `rce-n-${m.index}`, variant: baseVariant, style: baseStyle },
+            m.name,
+        )
+        if (m.data.isGradient && canRenderGradients()) hasGradient = true
+        out.push(renderColoredText(nameEl, m.data, `rce-cn-${m.index}`))
+        cursor = m.index + m.len
+    }
+    if (cursor < text.length) {
+        out.push(text.slice(cursor))
+    }
+
+    return { nodes: out, hasGradient }
+}
+
+function liftGradientRowIfNeeded(
+    node: ReactElement<any>,
+    children: any[],
+    hasGradient: boolean,
+): ReactNode {
+    if (!hasGradient || !ReactNative?.View) {
+        return React.cloneElement(node, { children })
+    }
+
+    const baseStyle = node.props?.style
+    const baseVariant = node.props?.variant
+    const rowChildren = children.map((child: any, idx: number) => {
+        if (typeof child === 'string' || typeof child === 'number') {
+            return React.createElement(
+                Design?.Text ?? node.type,
+                { key: `rce-ts-${idx}`, variant: baseVariant, style: baseStyle },
+                child,
+            )
+        }
+        return child
+    })
+
+    return React.createElement(
+        ReactNative.View,
+        {
+            style: {
+                flexDirection: 'row',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                flexShrink: 1,
+            },
+        },
+        ...rowChildren,
+    )
 }
 
 function colorTypingTextTree(
@@ -36,61 +142,88 @@ function colorTypingTextTree(
     }
 
     if (!React.isValidElement(node)) return node
-
     const props: any = node.props
-    if (isTypingTextContainer(node)) {
-        let userIndex = 0
-        let changed = false
-        let hasGradient = false
 
-        const mappedChildren = props.children.map((child: any, idx: number) => {
-            if (!React.isValidElement(child)) return child
+    // Strictly match Discord's Design.Text (never hijack outer layout containers)
+    if (node.type === Design?.Text) {
+        if (Array.isArray(props?.children)) {
+            const hasElementChild = props.children.some((c: any) => React.isValidElement(c))
 
-            const userId = typingUserIds[userIndex++]
-            if (!userId) return child
+            if (hasElementChild) {
+                let userIndex = 0
+                let changed = false
+                let hasGradient = false
 
-            const data = getMemberColorData(userId, guildId, skipNeutral)
-            if (!data) return child
+                const mappedChildren = props.children.map((child: any) => {
+                    if (!React.isValidElement(child)) return child
 
-            changed = true
-            if (data.isGradient && canRenderGradients()) {
-                hasGradient = true
-            }
-            return renderColoredText(child as ReactElement<any>, data, `rce-ti-${idx}`)
-        })
+                    const userId = typingUserIds[userIndex++]
+                    if (!userId) return child
 
-        if (!changed) return node
+                    const data = getMemberColorData(userId, guildId, skipNeutral)
+                    if (!data) return child
 
-        // Gradient MaskedView cannot live inside React Native <Text> on Android;
-        // lift the line into a horizontal row <View> so gradients render cleanly.
-        if (hasGradient && ReactNative?.View) {
-            const baseStyle = props.style
-            const baseVariant = props.variant
-            const rowChildren = mappedChildren.map((child: any, idx: number) => {
-                if (typeof child === 'string' || typeof child === 'number') {
-                    return React.createElement(
-                        Design?.Text ?? node.type,
-                        { key: `rce-ts-${idx}`, variant: baseVariant, style: baseStyle },
-                        child,
+                    changed = true
+                    if (data.isGradient && canRenderGradients()) hasGradient = true
+                    return renderColoredText(child as ReactElement<any>, data)
+                })
+
+                if (changed) {
+                    return liftGradientRowIfNeeded(
+                        node as ReactElement<any>,
+                        mappedChildren,
+                        hasGradient,
                     )
                 }
-                return child
-            })
-            return React.createElement(
-                ReactNative.View,
-                {
-                    style: {
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        flexShrink: 1,
-                    },
-                },
-                ...rowChildren,
-            )
+            } else {
+                const entries = buildNameEntries(guildId, typingUserIds, skipNeutral)
+                if (entries.length > 0) {
+                    let changed = false
+                    let hasGradient = false
+                    const out: any[] = []
+                    for (const part of props.children) {
+                        if (typeof part === 'string') {
+                            const split = splitStringWithColoredNames(
+                                part,
+                                entries,
+                                Design.Text,
+                                props.style,
+                                props.variant,
+                            )
+                            if (split) {
+                                changed = true
+                                if (split.hasGradient) hasGradient = true
+                                out.push(...split.nodes)
+                                continue
+                            }
+                        }
+                        out.push(part)
+                    }
+                    if (changed) {
+                        return liftGradientRowIfNeeded(node as ReactElement<any>, out, hasGradient)
+                    }
+                }
+            }
+        } else if (typeof props?.children === 'string') {
+            const entries = buildNameEntries(guildId, typingUserIds, skipNeutral)
+            const split =
+                entries.length > 0
+                    ? splitStringWithColoredNames(
+                        props.children,
+                        entries,
+                        Design.Text,
+                        props.style,
+                        props.variant,
+                    )
+                    : null
+            if (split) {
+                return liftGradientRowIfNeeded(
+                    node as ReactElement<any>,
+                    split.nodes,
+                    split.hasGradient,
+                )
+            }
         }
-
-        return React.cloneElement(node as ReactElement<any>, { children: mappedChildren })
     }
 
     const oldChildren = props?.children
@@ -148,6 +281,66 @@ function findBtiUserId(guildId: string, username: string, typingUserIds: string[
     return typingUserIds.length === 1 ? typingUserIds[0] : undefined
 }
 
+function colorCustomTypingTextTree(
+    node: any,
+    guildId: string,
+    username: string,
+    typingUserIds: string[],
+    skipNeutral: boolean,
+    depth = 0,
+): any {
+    if (depth > 16 || node == null) return node
+
+    if (Array.isArray(node)) {
+        let changed = false
+        const next = node.map(child => {
+            const patched = colorCustomTypingTextTree(child, guildId, username, typingUserIds, skipNeutral, depth + 1)
+            if (patched !== child) changed = true
+            return patched
+        })
+        return changed ? next : node
+    }
+
+    if (!React.isValidElement(node)) return node
+    const props: any = node.props
+
+    if (node.type === Design?.Text && typeof props?.children === 'string') {
+        const idx = props.children.indexOf(username)
+        if (idx >= 0) {
+            const uid = findBtiUserId(guildId, username, typingUserIds)
+            const data = uid ? getMemberColorData(uid, guildId, skipNeutral) : null
+            if (data) {
+                const split = splitStringWithColoredNames(
+                    props.children,
+                    [[username, data]],
+                    Design.Text,
+                    props.style,
+                    props.variant,
+                )
+                if (split) {
+                    return liftGradientRowIfNeeded(
+                        node as ReactElement<any>,
+                        split.nodes,
+                        split.hasGradient,
+                    )
+                }
+            }
+        }
+    }
+
+    const nextChildren = colorCustomTypingTextTree(
+        props?.children,
+        guildId,
+        username,
+        typingUserIds,
+        skipNeutral,
+        depth + 1,
+    )
+    return nextChildren === props?.children
+        ? node
+        : React.cloneElement(node as ReactElement<any>, { children: nextChildren })
+}
+
 const btiWrappers = new WeakMap<object, Map<string, any>>()
 const BTI_CTX_PROP = '__rceTypingCtx'
 
@@ -155,7 +348,7 @@ function wrapBetterTypingTree(
     node: any,
     skipNeutral: boolean,
     depth = 0,
-    typingCtx?: { channel: any; typingUserIds: string[]; username?: string },
+    typingCtx?: { channel: any; typingUserIds: string[] },
 ): any {
     if (depth > 16 || node == null) return node
 
@@ -175,7 +368,9 @@ function wrapBetterTypingTree(
     if (typeof node.type !== 'function') {
         const oldChildren = props.children
         const newChildren = wrapBetterTypingTree(oldChildren, skipNeutral, depth + 1, typingCtx)
-        return newChildren === oldChildren ? node : React.cloneElement(node as ReactElement<any>, { children: newChildren })
+        return newChildren === oldChildren
+            ? node
+            : React.cloneElement(node as ReactElement<any>, { children: newChildren })
     }
 
     const isBtiUser =
@@ -215,9 +410,7 @@ function wrapBetterTypingTree(
                     const guildId = channel?.guild_id ?? channel?.guildId
                     const ids: string[] = (cleanProps?.typingUserIds ?? ctx?.typingUserIds ?? []).map(String)
                     if (!guildId || typeof cleanProps?.username !== 'string' || ids.length === 0) return res
-                    const uid = findBtiUserId(String(guildId), cleanProps.username, ids)
-                    const data = uid ? getMemberColorData(uid, String(guildId), skipNeutral) : null
-                    return data ? colorDesignTextNodes(res, data) : res
+                    return colorCustomTypingTextTree(res, String(guildId), cleanProps.username, ids, skipNeutral)
                 }
             }
             map.set(kind, Wrapped)
@@ -238,7 +431,31 @@ function wrapBetterTypingTree(
 
     const oldChildren = props.children
     const newChildren = wrapBetterTypingTree(oldChildren, skipNeutral, depth + 1, typingCtx)
-    return newChildren === oldChildren ? node : React.cloneElement(node as ReactElement<any>, { children: newChildren })
+    return newChildren === oldChildren
+        ? node
+        : React.cloneElement(node as ReactElement<any>, { children: newChildren })
+}
+
+function summarizeTree(node: any, depth = 0, out: any[] = []): any[] {
+    if (depth > 8 || node == null || out.length >= 12) return out
+    if (Array.isArray(node)) {
+        for (const c of node) summarizeTree(c, depth, out)
+        return out
+    }
+    if (!React.isValidElement(node)) return out
+    const props: any = node.props ?? {}
+    const t: any = node.type
+    out.push({
+        depth,
+        isDesignText: t === Design?.Text,
+        type: typeof t === 'string' ? t : t?.displayName || t?.name || typeof t,
+        variant: props.variant,
+        childType: Array.isArray(props.children)
+            ? props.children.map((c: any) => (React.isValidElement(c) ? 'el' : typeof c))
+            : typeof props.children,
+    })
+    summarizeTree(props.children, depth + 1, out)
+    return out
 }
 
 export function patchTypingIndicator(
@@ -268,10 +485,12 @@ export function patchTypingIndicator(
 
         if (settings.debugLogs && !loggedOnce) {
             loggedOnce = true
-            logDebug('TypingIndicator row rendered', {
+            const firstColor = getMemberColorData(typingUserIds[0], String(guildId), settings.skipNeutralColors)
+            logDebug('TypingIndicator detail', {
                 guildId: String(guildId),
                 typingUserIds,
-                canGradient: canRenderGradients(),
+                firstColor: firstColor ? { hex: firstColor.colorString, isGradient: firstColor.isGradient } : null,
+                tree: summarizeTree(result),
             })
         }
 
