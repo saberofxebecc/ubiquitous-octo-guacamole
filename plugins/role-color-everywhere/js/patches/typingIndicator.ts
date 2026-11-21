@@ -52,11 +52,16 @@ function liftGradientRowIfNeeded(
 
     const baseStyle = node.props?.style
     const baseVariant = node.props?.variant
+    const baseColor = node.props?.color
     const rowChildren = children.map((child: any, idx: number) => {
         if (typeof child === 'string' || typeof child === 'number') {
             return React.createElement(
                 Design?.Text ?? node.type,
-                { key: `rce-ts-${idx}`, variant: baseVariant, style: baseStyle },
+                {
+                    key: `rce-ts-${idx}`,
+                    variant: baseVariant,
+                    ...(baseColor !== undefined ? { color: baseColor } : {}),
+                },
                 child,
             )
         }
@@ -66,12 +71,14 @@ function liftGradientRowIfNeeded(
     return React.createElement(
         ReactNative.View,
         {
-            style: {
-                flexDirection: 'row',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                flexShrink: 1,
-            },
+            style: [
+                baseStyle,
+                {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                },
+            ],
         },
         ...rowChildren,
     )
@@ -116,7 +123,7 @@ function colorNativeTypingTree(
             changed = true
             if (data.isGradient && canRenderGradients()) {
                 hasGradient = true
-                const flat = extractFlatText(child as ReactElement<any>, props.variant, props.style)
+                const flat = extractFlatText(child as ReactElement<any>, props.variant)
                 return renderColoredText(flat, data, `rce-ti-${idx}`)
             }
 

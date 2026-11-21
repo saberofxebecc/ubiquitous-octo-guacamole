@@ -88,7 +88,7 @@ function renderMaskedGradientText(
         <MaskedViewComp
             key={key}
             onLayout={onLayout}
-            style={{ flexDirection: 'row', alignSelf: 'flex-start' }}
+            style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'center' }}
             maskElement={maskElement}
         >
             <LinearGradientComp
