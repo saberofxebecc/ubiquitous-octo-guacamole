@@ -1,9 +1,11 @@
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { React, ReactNative } from '@valenced/react'
+import { Design } from '@valenced/discord/design'
 import { getModules } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
 import type { ColorData } from '../types'
 import { withComponentName } from './filters'
+import { replaceElement } from './react'
 
 let MaskedViewComp: any = null
 let LinearGradientComp: any = null
@@ -70,9 +72,11 @@ function renderMaskedGradientText(
     colors: string[],
     key?: string,
     onLayout?: any,
+    allowShrink = false,
 ): ReactElement<any> {
     const cleanProps = { ...(textEl.props ?? {}) }
     delete cleanProps.onLayout
+    if ('color' in cleanProps) delete cleanProps.color
 
     const maskElement = React.createElement(textEl.type, {
         ...cleanProps,
@@ -84,11 +88,15 @@ function renderMaskedGradientText(
         style: [cleanProps.style, { opacity: 0 }],
     })
 
+    const containerStyle = allowShrink
+        ? { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', flexShrink: 1 }
+        : { flexDirection: 'row', alignItems: 'center', alignSelf: 'center' }
+
     return (
         <MaskedViewComp
             key={key}
             onLayout={onLayout}
-            style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'center' }}
+            style={containerStyle}
             maskElement={maskElement}
         >
             <LinearGradientComp
@@ -110,6 +118,7 @@ export function renderColoredText(
     textEl: ReactElement<any>,
     data: ColorData,
     key?: string,
+    allowShrink = false,
 ): ReactElement<any> {
     const colors = data.isGradient ? getGradientColorsArray(data) : []
 
@@ -134,7 +143,6 @@ export function renderColoredText(
         const hasEmoji = segments.some(s => s.isEmoji)
         const hasNonEmoji = segments.some(s => !s.isEmoji)
 
-        // All emojis (no text to gradient) -> render unmodified
         if (hasEmoji && !hasNonEmoji) {
             return key !== undefined ? React.cloneElement(textEl, { key }) : textEl
         }
@@ -147,7 +155,11 @@ export function renderColoredText(
                 <ReactNative.View
                     key={key}
                     onLayout={onLayout}
-                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                    style={
+                        allowShrink
+                            ? { flexDirection: 'row', alignItems: 'center', flexShrink: 1 }
+                            : { flexDirection: 'row', alignItems: 'center' }
+                    }
                 >
                     {segments.map((seg, idx) => {
                         const segEl = React.createElement(
@@ -157,12 +169,45 @@ export function renderColoredText(
                         )
                         return seg.isEmoji
                             ? segEl
-                            : renderMaskedGradientText(segEl, colors, `rce-m-${idx}`)
+                            : renderMaskedGradientText(segEl, colors, `rce-m-${idx}`, undefined, allowShrink)
                     })}
                 </ReactNative.View>
             )
         }
     }
 
-    return renderMaskedGradientText(textEl, colors, key, onLayout)
+    return renderMaskedGradientText(textEl, colors, key, onLayout, allowShrink)
+}
+
+/**
+ * Colors the first Design.Text element in a React subtree.
+ * Uses a nested RN <Text> for solid colors so Design.Text's semantic `color` prop
+ * cannot override the role color, and MaskedView + LinearGradient for gradient roles.
+ */
+export function paintFirstDesignText(tree: ReactNode, data: ColorData): ReactNode {
+    const RNText = ReactNative?.Text
+    return replaceElement(
+        tree,
+        el => el.type === Design?.Text,
+        text => {
+            if (data.isGradient && canRenderGradients()) {
+                return renderColoredText(
+                    text,
+                    data,
+                    text.key != null ? String(text.key) : undefined,
+                    true,
+                )
+            }
+            if (!RNText) {
+                return React.cloneElement(text, {
+                    style: [text.props?.style, { color: data.colorString }],
+                })
+            }
+            return React.cloneElement(
+                text,
+                undefined,
+                React.createElement(RNText, { style: { color: data.colorString } }, text.props?.children),
+            )
+        },
+    )
 }

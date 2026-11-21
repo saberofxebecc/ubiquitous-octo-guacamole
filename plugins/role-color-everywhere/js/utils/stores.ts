@@ -35,6 +35,7 @@ export const getTypingStore = () =>
 export const getSelectedChannelStore = () =>
     Stores.SelectedChannelStore as {
         getChannelId?: () => string | undefined
+        getVoiceChannelId?: () => string | undefined
     }
 
 export const getThemeStore = () =>

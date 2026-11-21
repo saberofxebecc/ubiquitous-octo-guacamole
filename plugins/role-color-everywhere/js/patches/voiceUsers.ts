@@ -1,89 +1,90 @@
-import { getModules } from '@valenced/modules/finders'
-import { withProps } from '@valenced/modules/finders/filters'
+import type { ReactNode } from 'react'
+import { React } from '@valenced/react'
 import type { RoleColorSettings } from '../types'
-import { getMemberColorData } from '../utils/colors'
-import { withComponentName } from '../utils/filters'
-import { applyTextColor, mapReactElements, patchComponentRender } from '../utils/react'
+import { getColorsFromMember, getMemberColorData } from '../utils/colors'
+import { paintFirstDesignText } from '../utils/gradient'
+import { transformComponent } from '../utils/react'
+import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
 
-function resolveVoiceIds(props: any) {
-    const user = props?.user ?? props?.participant?.user ?? props?.member
-    const userId: string | undefined = user?.id ?? props?.userId ?? props?.participant?.userId
-    const guildOrChannel: string | undefined =
-        props?.guildId ??
-        props?.channelId ??
-        props?.channel?.id ??
-        props?.channel?.guild_id ??
-        props?.participant?.guildId ??
-        props?.participant?.channelId
-    return { userId, guildOrChannel }
+interface VoiceUserNameProps {
+    guildId?: string | null
+    member?: any
+    user?: { id?: string } | null
 }
 
-function colorVoiceRender(
-    label: string,
-    result: any,
-    props: any,
-    getSettings: () => RoleColorSettings,
-    logDebug: (msg: string, data?: unknown) => void,
-    loggedRef: { value: boolean },
-) {
-    const settings = getSettings()
-    if (!settings.voiceUsers || !result) return result
+interface MemberRowProps {
+    guildId?: string | null
+    user?: { id?: string } | null
+    member?: any
+}
 
-    const { userId, guildOrChannel } = resolveVoiceIds(props)
+interface ParticipantLabelProps {
+    participant?: { user?: { id?: string } | null } | null
+}
 
-    if (settings.debugLogs && !loggedRef.value) {
-        loggedRef.value = true
-        logDebug(`${label} props`, {
-            keys: props ? Object.keys(props) : [],
-            userId,
-            guildOrChannel,
-        })
-    }
-
-    const data = getMemberColorData(userId, guildOrChannel, settings.skipNeutralColors)
-    if (!data) return result
-
-    return mapReactElements(
-        result,
-        el => {
-            const text = el.props?.children
-            if (typeof text === 'string' && text.trim().length > 0 && el.props?.variant) {
-                return applyTextColor(el, data.colorString)
-            }
-            return el
-        },
-        4,
-    )
+function getCurrentVoiceGuildId(): string | undefined {
+    const voiceChannelId = getSelectedChannelStore()?.getVoiceChannelId?.()
+    if (!voiceChannelId) return undefined
+    return getChannelStore()?.getChannel?.(voiceChannelId)?.guild_id
 }
 
 export function patchVoiceUsers(
     getSettings: () => RoleColorSettings,
-    logDebug: (msg: string, data?: unknown) => void,
+    reportError: (e: unknown) => void,
     cleanup: (...fns: (() => void)[]) => void,
 ) {
-    // 1. VoiceUserItem (17510 - React.memo)
-    cleanup(
-        getModules(withProps('getVoiceUserHeight'), (mod: any) => {
-            const loggedRef = { value: false }
-            cleanup(
-                patchComponentRender(mod, 'default', (result, [props]) =>
-                    colorVoiceRender('VoiceUserItem', result, props, getSettings, logDebug, loggedRef),
-                ),
-            )
-        }),
-    )
+    const enabled = () => getSettings().voiceUsers
 
-    // 2. VoiceUserNameItem & VoiceUsersItem (17511, 17516)
-    for (const name of ['VoiceUserNameItem', 'VoiceUsersItem']) {
-        cleanup(
-            getModules(withComponentName(name), (mod: any) => {
-                const loggedRef = { value: false }
-                cleanup(
-                    patchComponentRender(mod, (result, [props]) =>
-                        colorVoiceRender(name, result, props, getSettings, logDebug, loggedRef),
-                    ),
+    cleanup(
+        // 1. Channel list & Active Now voice items
+        transformComponent<VoiceUserNameProps>(
+            'VoiceUserNameItem',
+            enabled,
+            (tree, { guildId, member, user }) => {
+                const skipNeutral = getSettings().skipNeutralColors
+                const data =
+                    getColorsFromMember(guildId, member, skipNeutral) ??
+                    getMemberColorData(user?.id, guildId ?? undefined, skipNeutral)
+                return data ? paintFirstDesignText(tree, data) : tree
+            },
+            reportError,
+        ),
+        // 2. Voice channel preview sheet rows
+        transformComponent<MemberRowProps>(
+            'MemberRowItem',
+            enabled,
+            (tree, { guildId, user, member }) => {
+                if (
+                    !React.isValidElement<{ label?: ReactNode }>(tree) ||
+                    tree.props.label == null
+                ) {
+                    return tree
+                }
+                const skipNeutral = getSettings().skipNeutralColors
+                const data =
+                    getMemberColorData(user?.id, guildId ?? undefined, skipNeutral, member) ??
+                    getColorsFromMember(guildId, member, skipNeutral)
+                return data
+                    ? React.cloneElement(tree, { label: paintFirstDesignText(tree.props.label, data) })
+                    : tree
+            },
+            reportError,
+        ),
+        // 3. Inside active voice call participant tiles
+        transformComponent<ParticipantLabelProps>(
+            'FloatingParticipantLabel',
+            enabled,
+            (tree, { participant }) => {
+                const guildId = getCurrentVoiceGuildId()
+                if (!guildId) return tree
+                const data = getMemberColorData(
+                    participant?.user?.id,
+                    guildId,
+                    getSettings().skipNeutralColors,
                 )
-            }),
-        )
-    }
+                return data ? paintFirstDesignText(tree, data) : tree
+            },
+            reportError,
+        ),
+    )
 }

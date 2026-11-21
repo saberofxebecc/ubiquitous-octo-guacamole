@@ -5,6 +5,7 @@ import type { PluginApi } from '@valenced/plugins/types'
 import { patchChatMessages } from './patches/chatMessages'
 import { patchMentions } from './patches/mentions'
 import { patchTypingIndicator } from './patches/typingIndicator'
+import { patchVoiceUsers } from './patches/voiceUsers'
 import { DEFAULT_SETTINGS, type RoleColorSettings } from './types'
 import { initGradientComponents } from './utils/gradient'
 
@@ -14,7 +15,7 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
         default: DEFAULT_SETTINGS,
     },
 
-    start({ cleanup, jsonStorage, logger }) {
+    start({ cleanup, jsonStorage, logger, plugin }) {
         const getSettings = (): RoleColorSettings => ({
             ...DEFAULT_SETTINGS,
             ...jsonStorage.cache,
@@ -26,12 +27,20 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
             }
         }
 
+        const reportError = (e: unknown) => {
+            plugin.reportError(e)
+            if (getSettings().debugLogs) {
+                logger.error('Patch error', String(e))
+            }
+        }
+
         initGradientComponents(cleanup)
         patchChatMessages(getSettings, cleanup)
         patchMentions(getSettings, logDebug, cleanup)
         patchTypingIndicator(getSettings, logDebug, cleanup)
+        patchVoiceUsers(getSettings, reportError, cleanup)
 
-        logger.log('Role Color Everywhere v0.2.1 started')
+        logger.log('Role Color Everywhere v0.3.0 started')
     },
 
     SettingsComponent({ api }: { api: PluginApi<{ jsonStorage: RoleColorSettings }> }) {

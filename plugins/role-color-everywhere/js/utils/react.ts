@@ -1,7 +1,7 @@
-import { type ReactElement, type ReactNode } from 'react'
-import { React } from '@valenced/react'
+import type { ComponentType, ElementType, FC, ReactElement, ReactNode } from 'react'
+import { React, ReactJSXRuntime } from '@valenced/react'
 import { instead } from '@valenced/patcher'
-import { insteadJSX } from '@valenced/react/jsx-runtime'
+import { beforeJSX, insteadJSX } from '@valenced/react/jsx-runtime'
 
 export type RenderHook = (result: ReactNode, args: any[], self?: any) => ReactNode
 
@@ -19,19 +19,13 @@ function ensureCreateElementHook() {
             const type = args[0]
             if (typeof type === 'function') {
                 const wrapped = createElementTargets.get(type)
-                if (wrapped) {
-                    args[0] = wrapped
-                }
+                if (wrapped) args[0] = wrapped
             }
             return orig(...args)
         },
     )
 }
 
-/**
- * Patches React.memo, React.forwardRef, class components, and plain function components.
- * Function components are intercepted across both react/jsx-runtime and React.createElement.
- */
 export function patchComponentRender(
     targetOrModule: any,
     keyOrHook: string | RenderHook,
@@ -41,7 +35,6 @@ export function patchComponentRender(
     const hook = (typeof keyOrHook === 'string' ? maybeHook : keyOrHook) as RenderHook | undefined
     if (!target || !hook) return () => { }
 
-    // React.memo(...)
     if (typeof target === 'object' && typeof target.type === 'function') {
         return instead(target, 'type', (args: any[], orig: (...a: any[]) => ReactNode) => {
             const result = orig(...args)
@@ -49,7 +42,6 @@ export function patchComponentRender(
         })
     }
 
-    // React.forwardRef(...)
     if (typeof target === 'object' && typeof target.render === 'function') {
         return instead(target, 'render', (args: any[], orig: (...a: any[]) => ReactNode) => {
             const result = orig(...args)
@@ -57,7 +49,6 @@ export function patchComponentRender(
         })
     }
 
-    // Class component
     if (typeof target === 'function' && target.prototype?.isReactComponent) {
         return instead(
             target.prototype,
@@ -69,14 +60,10 @@ export function patchComponentRender(
         )
     }
 
-    // Plain function component
     if (typeof target === 'function') {
         let wrapped = wrappedFunctions.get(target)
         if (!wrapped) {
-            wrapped = (props: any) => {
-                const res = target(props)
-                return hook(res, [props])
-            }
+            wrapped = (props: any) => hook(target(props), [props])
             Object.defineProperty(wrapped, 'name', {
                 value: target.displayName || target.name || 'WrappedComponent',
             })
@@ -108,9 +95,164 @@ export function patchComponentRender(
     return () => { }
 }
 
+export function componentName(type: unknown): string | undefined {
+    if (typeof type === 'function') {
+        return (type as any).displayName || type.name || undefined
+    }
+    if (typeof type !== 'object' || type === null) return undefined
+
+    const obj = type as { displayName?: string; type?: unknown; render?: unknown }
+    if (typeof obj.displayName === 'string' && obj.displayName.length > 0) {
+        return obj.displayName
+    }
+    const inner = obj.type ?? obj.render
+    return typeof inner === 'function'
+        ? (inner as any).displayName || inner.name || undefined
+        : componentName(inner)
+}
+
+type JSXFactory = (type: unknown, props: unknown, key?: unknown) => unknown
+
+const waiting = new Map<string, Set<(type: ElementType) => void>>()
+let unpatchJSXWaiter: (() => void) | undefined
+
+function stopJSXWaiter() {
+    if (waiting.size) return
+    unpatchJSXWaiter?.()
+    unpatchJSXWaiter = undefined
+}
+
+function startJSXWaiter() {
+    const runtime = ReactJSXRuntime as unknown as Record<'jsx' | 'jsxs', JSXFactory>
+    const hook = function (this: unknown, args: Parameters<JSXFactory>, original: JSXFactory) {
+        const [type] = args
+        if (typeof type !== 'string') {
+            const name = componentName(type)
+            const callbacks = name !== undefined ? waiting.get(name) : undefined
+            if (callbacks) {
+                waiting.delete(name!)
+                if (!waiting.size) setTimeout(stopJSXWaiter)
+                for (const cb of callbacks) cb(type as ElementType)
+            }
+        }
+        return Reflect.apply(original, this, args)
+    }
+    const unpatches = [instead(runtime, 'jsx', hook), instead(runtime, 'jsxs', hook)]
+    return () => {
+        for (const u of unpatches) u()
+    }
+}
+
 /**
- * Shallow, depth-bounded React element mapper to avoid full-tree O(N^2) overhead.
+ * Fires once when a component with `name` is first rendered via JSX, then unhooks jsx/jsxs.
  */
+export function onComponentType(name: string, callback: (type: ElementType) => void) {
+    let callbacks = waiting.get(name)
+    if (!callbacks) waiting.set(name, (callbacks = new Set()))
+    callbacks.add(callback)
+    unpatchJSXWaiter ??= startJSXWaiter()
+
+    return () => {
+        callbacks.delete(callback)
+        if (!callbacks.size) waiting.delete(name)
+        if (!waiting.size) stopJSXWaiter()
+    }
+}
+
+const wrappedByTransform = new WeakMap<object, WeakMap<object, ComponentType<any>>>()
+
+export function wrapComponent<P extends object>(
+    type: unknown,
+    transform: (tree: ReactNode, props: P) => ReactNode,
+): ComponentType<P> | undefined {
+    if (typeof type !== 'function' && (typeof type !== 'object' || type === null)) return undefined
+
+    const memoized = typeof type === 'object'
+    const render = memoized ? (type as { type?: unknown }).type : type
+    if (typeof render !== 'function') return undefined
+
+    let cache = wrappedByTransform.get(transform)
+    if (!cache) wrappedByTransform.set(transform, (cache = new WeakMap()))
+
+    let Wrapped = cache.get(type as object)
+    if (!Wrapped) {
+        const Render = (props: P) => transform((render as FC<P>)(props) as ReactNode, props)
+        Wrapped = memoized
+            ? React.memo(Render, (type as { compare?: any }).compare)
+            : Render
+        cache.set(type as object, Wrapped)
+    }
+    return Wrapped
+}
+
+/**
+ * Intercepts JSX elements for component `name` (even unexported internal components)
+ * and transforms their rendered tree with `transform(tree, props)`.
+ */
+export function transformComponent<P extends object>(
+    name: string,
+    enabled: () => boolean,
+    transform: (tree: ReactNode, props: P) => ReactNode,
+    reportError: (e: unknown) => void,
+) {
+    let unpatch: (() => unknown) | undefined
+
+    const safeTransform = (tree: ReactNode, props: P) => {
+        try {
+            return transform(tree, props)
+        } catch (e) {
+            reportError(e)
+            return tree
+        }
+    }
+
+    const stop = onComponentType(name, type => {
+        unpatch = beforeJSX(
+            type as any,
+            ([elType, props, key]: [any, any, any?]) => {
+                if (!enabled()) return [elType, props, key]
+                const Wrapped = wrapComponent<P>(type, safeTransform)
+                return Wrapped ? [Wrapped, props, key] : [elType, props, key]
+            },
+        )
+    })
+
+    return () => {
+        stop()
+        unpatch?.()
+    }
+}
+
+export function replaceElement(
+    tree: ReactNode,
+    predicate: (element: ReactElement<any>) => boolean,
+    replacer: (element: ReactElement<any>) => ReactNode,
+): ReactNode {
+    if (Array.isArray(tree)) {
+        for (let i = 0; i < tree.length; i++) {
+            const result = replaceElement(tree[i], predicate, replacer)
+            if (result === tree[i]) continue
+            const copy = tree.slice()
+            copy[i] = result
+            return copy
+        }
+        return tree
+    }
+
+    if (!React.isValidElement<{ children?: ReactNode }>(tree)) return tree
+    if (predicate(tree)) return replacer(tree)
+
+    const { children } = tree.props
+    if (children == null) return tree
+
+    const result = replaceElement(children, predicate, replacer)
+    if (result === children) return tree
+
+    return Array.isArray(result)
+        ? React.cloneElement(tree, undefined, ...result)
+        : React.cloneElement(tree, undefined, result)
+}
+
 export function mapReactElements(
     node: ReactNode,
     mapper: (el: ReactElement<any>) => ReactElement<any>,
@@ -131,15 +273,12 @@ export function mapReactElements(
 
     if (!React.isValidElement(node)) return node
 
-    let current: ReactElement<any> = node
-    const mappedSelf = mapper(current)
-    current = mappedSelf
-
+    const current = mapper(node as ReactElement<any>)
     const children = (current.props as any)?.children
     if (children !== undefined) {
         const mappedChildren = mapReactElements(children, mapper, maxDepth, depth + 1)
         if (mappedChildren !== children) {
-            current = React.cloneElement(current, undefined, mappedChildren)
+            return React.cloneElement(current, undefined, mappedChildren)
         }
     }
 
@@ -154,9 +293,6 @@ export function applyTextColor(el: ReactElement<any>, color: string): ReactEleme
     })
 }
 
-/**
- * Wraps `renderItem` on FlatList / FlashList / FastList elements within shallow depth.
- */
 export function wrapListRenderItem(
     node: ReactNode,
     transformItemResult: (rendered: ReactNode, info: any) => ReactNode,

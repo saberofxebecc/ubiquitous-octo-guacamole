@@ -159,22 +159,32 @@ function findAssignedRoleColor(
     return null
 }
 
+export function getColorsFromMember(
+    guildId?: string | null,
+    member?: any,
+    skipNeutral = false,
+): ColorData | null {
+    if (!guildId || !member) return null
+    const direct = buildColorData(guildId, member.colorString, member.colorStrings, skipNeutral)
+    if (direct) return direct
+    return findAssignedRoleColor(guildId, member, skipNeutral)
+}
+
 export function getMemberColorData(
     userId?: string,
     channelOrGuildId?: string,
     skipNeutral = false,
+    fallbackMember?: any,
 ): ColorData | null {
-    if (!userId || !channelOrGuildId) return null
+    if (!channelOrGuildId) return null
     const guildId = getGuildId(channelOrGuildId)
     if (!guildId) return null
 
-    const member = getGuildMemberStore()?.getMember?.(guildId, userId)
+    const cached = userId ? getGuildMemberStore()?.getMember?.(guildId, userId) : undefined
+    const member = cached ?? fallbackMember
     if (!member) return null
 
-    const direct = buildColorData(guildId, member.colorString, member.colorStrings, skipNeutral)
-    if (direct) return direct
-
-    return findAssignedRoleColor(guildId, member, skipNeutral)
+    return getColorsFromMember(guildId, member, skipNeutral)
 }
 
 export function getRoleColorData(
