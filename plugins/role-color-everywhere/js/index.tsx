@@ -46,7 +46,7 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
         patchReactorsList(getSettings, reportError, cleanup)
         patchPollResults(getSettings, logDebug, cleanup, reportError)
 
-        logger.log('Role Color Everywhere v0.5.2 started')
+        logger.log('Role Color Everywhere v0.5.3 started')
     },
 
     SettingsComponent({ api }: { api: PluginApi<{ jsonStorage: RoleColorSettings }> }) {

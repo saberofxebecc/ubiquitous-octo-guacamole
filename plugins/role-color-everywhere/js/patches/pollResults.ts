@@ -1,10 +1,10 @@
-import type { Context, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { React, ReactNative } from '@valenced/react'
 import { Design } from '@valenced/discord/design'
 import type { ColorData, RoleColorSettings } from '../types'
 import { getColorsFromMember, getGuildId } from '../utils/colors'
 import { canRenderGradients, paintFirstDesignText, renderColoredText } from '../utils/gradient'
-import { replaceElement, transformComponent, wrapComponent, wrapListRenderItem } from '../utils/react'
+import { replaceElement, transformComponent, wrapListRenderItem } from '../utils/react'
 import {
     getGuildMemberRequesterStore,
     getGuildMemberStore,
@@ -13,12 +13,6 @@ import {
 
 interface VotersListProps {
     channelId?: string
-}
-
-let VotersGuildContext: Context<string | undefined> | null = null
-
-function getVotersGuildContext() {
-    return (VotersGuildContext ??= React.createContext<string | undefined>(undefined))
 }
 
 const noopSubscribe = () => () => { }
@@ -31,15 +25,38 @@ function subscribeToMembers(callback: () => void) {
     }
 }
 
+function extractUserId(item: any, row: ReactNode): string | undefined {
+    if (typeof item === 'string' && /^\d+$/.test(item)) return item
+    const fromItem =
+        item?.user?.id ??
+        item?.id ??
+        item?.userId ??
+        item?.voter?.id ??
+        item?.member?.userId ??
+        item?.member?.id
+    if (fromItem) return String(fromItem)
+
+    if (React.isValidElement(row)) {
+        const icon: any = (row.props as any)?.icon
+        const fromIcon = icon?.props?.user?.id ?? icon?.props?.userId
+        if (fromIcon) return String(fromIcon)
+    }
+    return undefined
+}
+
 function colorTableRowLabel(label: ReactNode, data: ColorData): ReactNode {
     if (typeof label === 'string') {
-        if (data.isGradient && canRenderGradients() && Design?.Text) {
+        if (data.isGradient && canRenderGradients() && Design?.Text && ReactNative?.View) {
             const textEl = React.createElement(
                 Design.Text,
                 { variant: 'text-md/semibold', numberOfLines: 1 },
                 label,
             )
-            return renderColoredText(textEl, data, undefined, true)
+            return React.createElement(
+                ReactNative.View,
+                { style: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 } },
+                renderColoredText(textEl, data, undefined, true),
+            )
         }
         if (Design?.Text && ReactNative?.Text) {
             return React.createElement(
@@ -81,15 +98,18 @@ export function patchPollResults(
     cleanup: (...fns: (() => void)[]) => void,
     reportError?: (e: unknown) => void,
 ) {
-    let loggedList = false
-    let loggedRow = false
+    let loggedItem = false
 
-    function transformVoterRow(renderedTree: ReactNode, rowProps: any): ReactNode {
-        const ctxGuildId = React.useContext(getVotersGuildContext())
+    function ColoredPollVoterRow({
+        row,
+        userId,
+        guildId,
+    }: {
+        row: ReactNode
+        userId: string
+        guildId: string
+    }) {
         const settings = getSettings()
-        const guildId: string | undefined = rowProps?.guild?.id ?? ctxGuildId
-        const userId: string | undefined =
-            rowProps?.user?.id ?? rowProps?.voter?.id ?? rowProps?.id ?? rowProps?.userId
 
         const member = React.useSyncExternalStore(
             guildId && userId ? subscribeToMembers : noopSubscribe,
@@ -102,22 +122,10 @@ export function patchPollResults(
             }
         }, [guildId, userId, member])
 
-        if (settings.debugLogs && !loggedRow) {
-            loggedRow = true
-            logDebug('VotersList row rendered', {
-                rowPropKeys: rowProps ? Object.keys(rowProps) : [],
-                guildId,
-                userId,
-                hasMember: Boolean(member),
-            })
-        }
-
-        if (!settings.pollResults || !guildId || !userId || !member) {
-            return renderedTree
-        }
+        if (!settings.pollResults || !member) return row
 
         const data = getColorsFromMember(guildId, member, settings.skipNeutralColors)
-        return data ? applyColorToVoterRow(renderedTree, data) : renderedTree
+        return data ? applyColorToVoterRow(row, data) : row
     }
 
     cleanup(
@@ -129,31 +137,32 @@ export function patchPollResults(
                 const guildId = getGuildId(channelId ?? getSelectedChannelStore()?.getChannelId?.())
                 if (!guildId) return tree
 
-                let foundList = false
-                const wrappedTree = wrapListRenderItem(
+                return wrapListRenderItem(
                     tree,
-                    row => {
-                        foundList = true
-                        if (!React.isValidElement(row)) return row
-                        const WrappedRow = wrapComponent(row.type, transformVoterRow)
-                        if (!WrappedRow) return row
-                        return React.createElement(WrappedRow, {
-                            ...(row.props as object),
-                            key: row.key ?? undefined,
+                    (row, info) => {
+                        const item = info?.item
+                        const uid = extractUserId(item, row)
+
+                        if (settings.debugLogs && !loggedItem && item !== undefined) {
+                            loggedItem = true
+                            logDebug('VotersList item sample', {
+                                itemType: typeof item,
+                                itemKeys: item && typeof item === 'object' ? Object.keys(item) : undefined,
+                                uid: uid ?? null,
+                                labelType: React.isValidElement(row) ? typeof (row.props as any)?.label : typeof row,
+                            })
+                        }
+
+                        if (!uid) return row
+
+                        return React.createElement(ColoredPollVoterRow, {
+                            key: (React.isValidElement(row) && row.key != null ? String(row.key) : undefined) ?? uid,
+                            row,
+                            userId: uid,
+                            guildId,
                         })
                     },
                     12,
-                )
-
-                if (settings.debugLogs && !loggedList) {
-                    loggedList = true
-                    logDebug('VotersList render', { guildId, foundList })
-                }
-
-                return React.createElement(
-                    getVotersGuildContext().Provider as any,
-                    { value: guildId },
-                    wrappedTree,
                 )
             },
             reportError ?? (e => logDebug('PollResults error', String(e))),
