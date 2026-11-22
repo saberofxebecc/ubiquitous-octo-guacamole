@@ -16,6 +16,7 @@ interface DiscordTagProps {
 
 let ReactionsGuildContext: Context<string | undefined> | null = null
 let PollGuildContext: Context<string | undefined> | null = null
+let AutocompleteGuildContext: Context<string | undefined> | null = null
 
 export function getReactionsGuildContext() {
     return (ReactionsGuildContext ??= React.createContext<string | undefined>(undefined))
@@ -23,6 +24,10 @@ export function getReactionsGuildContext() {
 
 export function getPollGuildContext() {
     return (PollGuildContext ??= React.createContext<string | undefined>(undefined))
+}
+
+export function getAutocompleteGuildContext() {
+    return (AutocompleteGuildContext ??= React.createContext<string | undefined>(undefined))
 }
 
 const noopSubscribe = () => () => { }
@@ -43,11 +48,13 @@ export function patchReactorsList(
     function useColoredTag(tree: ReactNode, { user }: DiscordTagProps) {
         const reactionsGuildId = React.useContext(getReactionsGuildContext())
         const pollGuildId = React.useContext(getPollGuildContext())
+        const autocompleteGuildId = React.useContext(getAutocompleteGuildContext())
         const settings = getSettings()
 
         const guildId =
             (reactionsGuildId && settings.reactorsList ? reactionsGuildId : undefined) ??
-            (pollGuildId && settings.pollResults ? pollGuildId : undefined)
+            (pollGuildId && settings.pollResults ? pollGuildId : undefined) ??
+            (autocompleteGuildId && settings.chatInputAndAutocomplete ? autocompleteGuildId : undefined)
         const userId = user?.id
 
         const member = React.useSyncExternalStore(

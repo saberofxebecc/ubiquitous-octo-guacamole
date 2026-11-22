@@ -16,6 +16,7 @@ import {
 import { canRenderGradients, paintFirstDesignText, renderColoredText } from '../utils/gradient'
 import { replaceElement, wrapComponent } from '../utils/react'
 import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
+import { getAutocompleteGuildContext } from './reactorsList'
 
 function colorRowLabel(label: ReactNode, data: ColorData): ReactNode {
     if (typeof label === 'string') {
@@ -244,16 +245,25 @@ export function patchMentions(
 
                     if (settings.debugLogs && !loggedUser) {
                         loggedUser = true
+                        const label = React.isValidElement(tree) ? (tree.props as any)?.label : undefined
+                        const lt: any = React.isValidElement(label) ? label.type : undefined
                         logDebug('Autocomplete User row', {
-                            propKeys: props ? Object.keys(props) : [],
                             guildId,
                             userId,
                             hasColor: Boolean(data),
-                            hasLabel: React.isValidElement(tree) && 'label' in ((tree.props as any) ?? {}),
+                            labelType: lt ? (lt.displayName || lt.name || lt.type?.name || typeof lt) : typeof label,
+                            labelProps: React.isValidElement(label) ? Object.keys((label.props as any) ?? {}) : undefined,
                         })
                     }
 
-                    return data ? colorAutocompleteTree(tree, data) : tree
+                    const colored = data ? colorAutocompleteTree(tree, data) : tree
+                    return guildId
+                        ? React.createElement(
+                            getAutocompleteGuildContext().Provider as any,
+                            { value: guildId },
+                            colored,
+                        )
+                        : colored
                 }
 
                 const transformRoleRow = (tree: ReactNode, props: any): ReactNode => {
