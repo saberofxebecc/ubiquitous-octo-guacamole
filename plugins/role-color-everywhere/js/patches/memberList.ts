@@ -51,7 +51,7 @@ export function patchMemberList(
                     el => el.type === Design?.Text,
                     text =>
                         React.cloneElement(text, {
-                            style: [text.props?.style, { fontSize: 16, lineHeight: 22, fontWeight: 'bold' }],
+                            style: [text.props?.style, { fontSize: 18, lineHeight: 24, fontWeight: 'bold' }],
                         }),
                 )
                 const role = findRoleByHeaderTitle(resolvedGuildId, title)
