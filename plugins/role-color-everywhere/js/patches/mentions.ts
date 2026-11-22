@@ -18,6 +18,9 @@ import { replaceElement, wrapComponent } from '../utils/react'
 import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
 import { getAutocompleteGuildContext } from './reactorsList'
 
+const applyRceLabelColor = (rendered: ReactNode, props: any): ReactNode =>
+    props?.__rceColor ? paintFirstDesignText(rendered, props.__rceColor) : rendered
+
 function colorRowLabel(label: ReactNode, data: ColorData): ReactNode {
     if (typeof label === 'string') {
         if (data.isGradient && canRenderGradients() && Design?.Text && ReactNative?.View) {
@@ -43,7 +46,25 @@ function colorRowLabel(label: ReactNode, data: ColorData): ReactNode {
     }
 
     if (React.isValidElement(label)) {
-        return paintFirstDesignText(label, data)
+        let matched = false
+        const painted = replaceElement(
+            label,
+            el => el.type === Design?.Text,
+            () => {
+                matched = true
+                return label
+            },
+        )
+        if (matched) return paintFirstDesignText(painted, data)
+
+        const Wrapped = wrapComponent(label.type, applyRceLabelColor)
+        if (Wrapped) {
+            return React.createElement(Wrapped, {
+                ...(label.props as object),
+                __rceColor: data,
+                key: label.key ?? undefined,
+            })
+        }
     }
     return label
 }
