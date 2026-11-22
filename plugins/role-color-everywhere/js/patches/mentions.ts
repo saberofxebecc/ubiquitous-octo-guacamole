@@ -1,35 +1,66 @@
+import type { ReactNode } from 'react'
+import { React, ReactNative } from '@valenced/react'
+import { Design } from '@valenced/discord/design'
 import { getModules } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
 import { after, before, instead } from '@valenced/patcher'
-import type { RoleColorSettings } from '../types'
-import { getMemberColorData, getRoleColorData, hexToInt } from '../utils/colors'
-import { withComponentName } from '../utils/filters'
-import { applyTextColor, mapReactElements, patchComponentRender, wrapListRenderItem } from '../utils/react'
+import { beforeJSX } from '@valenced/react/jsx-runtime'
+import type { ColorData, RoleColorSettings } from '../types'
+import {
+    getColorsFromRole,
+    getGuildId,
+    getMemberColorData,
+    getRoleColorData,
+    hexToInt,
+} from '../utils/colors'
+import { canRenderGradients, paintFirstDesignText, renderColoredText } from '../utils/gradient'
+import { replaceElement, wrapComponent } from '../utils/react'
 import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
 
-function colorAutocompleteRow(row: any, item: any, guildId: string, skipNeutral: boolean) {
-    if (!row) return row
-    const uid =
-        item?.user?.id ??
-        item?.id ??
-        item?.userId ??
-        item?.record?.id
-    const roleId = item?.role?.id ?? item?.roleId
-    const data = roleId
-        ? getRoleColorData(guildId, roleId, skipNeutral)
-        : getMemberColorData(uid, guildId, skipNeutral)
-    if (!data) return row
+function colorRowLabel(label: ReactNode, data: ColorData): ReactNode {
+    if (typeof label === 'string') {
+        if (data.isGradient && canRenderGradients() && Design?.Text && ReactNative?.View) {
+            const textEl = React.createElement(
+                Design.Text,
+                { variant: 'text-md/semibold', numberOfLines: 1 },
+                label,
+            )
+            return React.createElement(
+                ReactNative.View,
+                { style: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 } },
+                renderColoredText(textEl, data, undefined, true),
+            )
+        }
+        if (Design?.Text && ReactNative?.Text) {
+            return React.createElement(
+                Design.Text,
+                { variant: 'text-md/semibold', numberOfLines: 1 },
+                React.createElement(ReactNative.Text, { style: { color: data.colorString } }, label),
+            )
+        }
+        return label
+    }
 
-    return mapReactElements(
-        row,
+    if (React.isValidElement(label)) {
+        return paintFirstDesignText(label, data)
+    }
+    return label
+}
+
+function colorAutocompleteTree(tree: ReactNode, data: ColorData): ReactNode {
+    let matchedTableRow = false
+    const withTableRow = replaceElement(
+        tree,
+        el => el.props != null && 'label' in el.props,
         el => {
-            if (typeof el.props?.children === 'string' && el.props?.variant) {
-                return applyTextColor(el, data.colorString)
-            }
-            return el
+            matchedTableRow = true
+            return React.cloneElement(el, {
+                label: colorRowLabel(el.props.label, data),
+            })
         },
-        5,
     )
+    if (matchedTableRow) return withTableRow
+    return paintFirstDesignText(tree, data)
 }
 
 export function patchMentions(
@@ -187,43 +218,94 @@ export function patchMentions(
         }),
     )
 
-    // 4. @ Mention Autocomplete Popup (13239)
+    // 4. @ Mention Autocomplete Popup rows (13240.default.User & .Role)
     cleanup(
-        getModules(withComponentName('AutocompleteWrapper', 'ACWrapper'), (mod: any) => {
-            let logged = false
-            cleanup(
-                patchComponentRender(mod, (result, [props]) => {
-                    const settings = getSettings()
-                    if (!settings.chatInputAndAutocomplete || !result) return result
+        getModules(
+            withProps('AUTOCOMPLETE_STICKER_NODE_SIZE', 'AUTOCOMPLETE_STICKER_NODE_MARGIN'),
+            (mod: any) => {
+                const renderers = mod?.default
+                if (!renderers || typeof renderers !== 'object') return
 
-                    const channelId = props?.channelId ?? getSelectedChannelStore()?.getChannelId?.()
+                let loggedUser = false
+                let loggedRole = false
+
+                const transformUserRow = (tree: ReactNode, props: any): ReactNode => {
+                    const settings = getSettings()
+                    if (!settings.chatInputAndAutocomplete || !tree) return tree
+
                     const guildId =
                         props?.guildId ??
-                        (channelId ? getChannelStore()?.getChannel?.(channelId)?.guild_id : undefined)
+                        props?.channel?.guild_id ??
+                        getGuildId(props?.channelId ?? getSelectedChannelStore()?.getChannelId?.())
+                    const userId = props?.user?.id ?? props?.id ?? props?.userId
+                    const data = guildId
+                        ? getMemberColorData(userId, guildId, settings.skipNeutralColors, props?.member)
+                        : null
 
-                    if (settings.debugLogs && !logged) {
-                        logged = true
-                        logDebug('AutocompleteWrapper props', {
-                            keys: props ? Object.keys(props) : [],
+                    if (settings.debugLogs && !loggedUser) {
+                        loggedUser = true
+                        logDebug('Autocomplete User row', {
+                            propKeys: props ? Object.keys(props) : [],
                             guildId,
+                            userId,
+                            hasColor: Boolean(data),
+                            hasLabel: React.isValidElement(tree) && 'label' in ((tree.props as any) ?? {}),
                         })
                     }
 
-                    if (!guildId) return result
+                    return data ? colorAutocompleteTree(tree, data) : tree
+                }
 
-                    let loggedItem = false
-                    return wrapListRenderItem(result, (row, info) => {
-                        const item = info?.item
-                        if (settings.debugLogs && !loggedItem && item) {
-                            loggedItem = true
-                            logDebug('Autocomplete item sample', {
-                                itemKeys: typeof item === 'object' ? Object.keys(item) : typeof item,
-                            })
-                        }
-                        return colorAutocompleteRow(row, item, guildId, settings.skipNeutralColors)
-                    })
-                }),
-            )
-        }),
+                const transformRoleRow = (tree: ReactNode, props: any): ReactNode => {
+                    const settings = getSettings()
+                    if (!settings.chatInputAndAutocomplete || !tree) return tree
+
+                    const guildId =
+                        props?.guildId ??
+                        props?.channel?.guild_id ??
+                        getGuildId(props?.channelId ?? getSelectedChannelStore()?.getChannelId?.())
+                    const roleObj = props?.role ?? props
+                    const data =
+                        getColorsFromRole(guildId, roleObj, settings.skipNeutralColors) ??
+                        (guildId && roleObj?.id
+                            ? getRoleColorData(guildId, roleObj.id, settings.skipNeutralColors)
+                            : null)
+
+                    if (settings.debugLogs && !loggedRole) {
+                        loggedRole = true
+                        logDebug('Autocomplete Role row', {
+                            propKeys: props ? Object.keys(props) : [],
+                            guildId,
+                            hasColor: Boolean(data),
+                        })
+                    }
+
+                    return data ? colorAutocompleteTree(tree, data) : tree
+                }
+
+                if (typeof renderers.User === 'function') {
+                    const origUser = renderers.User
+                    cleanup(
+                        beforeJSX(origUser, ([elType, props, key]: [any, any, any?]) => {
+                            if (!getSettings().chatInputAndAutocomplete) return [elType, props, key]
+                            const Wrapped = wrapComponent(origUser, transformUserRow)
+                            return Wrapped ? [Wrapped, props, key] : [elType, props, key]
+                        }),
+                    )
+                }
+
+                if (typeof renderers.Role === 'function') {
+                    const origRole = renderers.Role
+                    cleanup(
+                        beforeJSX(origRole, ([elType, props, key]: [any, any, any?]) => {
+                            if (!getSettings().chatInputAndAutocomplete) return [elType, props, key]
+                            const Wrapped = wrapComponent(origRole, transformRoleRow)
+                            return Wrapped ? [Wrapped, props, key] : [elType, props, key]
+                        }),
+                    )
+                }
+            },
+            { max: 1 },
+        ),
     )
 }
