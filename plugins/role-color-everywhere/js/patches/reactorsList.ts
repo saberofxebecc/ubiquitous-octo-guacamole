@@ -15,9 +15,14 @@ interface DiscordTagProps {
 }
 
 let ReactionsGuildContext: Context<string | undefined> | null = null
+let PollGuildContext: Context<string | undefined> | null = null
 
-function getReactionsGuildContext() {
+export function getReactionsGuildContext() {
     return (ReactionsGuildContext ??= React.createContext<string | undefined>(undefined))
+}
+
+export function getPollGuildContext() {
+    return (PollGuildContext ??= React.createContext<string | undefined>(undefined))
 }
 
 const noopSubscribe = () => () => { }
@@ -35,10 +40,14 @@ export function patchReactorsList(
     reportError: (e: unknown) => void,
     cleanup: (...fns: (() => void)[]) => void,
 ) {
-    const enabled = () => getSettings().reactorsList
-
     function useColoredTag(tree: ReactNode, { user }: DiscordTagProps) {
-        const guildId = React.useContext(getReactionsGuildContext())
+        const reactionsGuildId = React.useContext(getReactionsGuildContext())
+        const pollGuildId = React.useContext(getPollGuildContext())
+        const settings = getSettings()
+
+        const guildId =
+            (reactionsGuildId && settings.reactorsList ? reactionsGuildId : undefined) ??
+            (pollGuildId && settings.pollResults ? pollGuildId : undefined)
         const userId = user?.id
 
         const member = React.useSyncExternalStore(
@@ -54,14 +63,14 @@ export function patchReactorsList(
 
         if (!guildId || !userId || !member) return tree
 
-        const data = getColorsFromMember(guildId, member, getSettings().skipNeutralColors)
+        const data = getColorsFromMember(guildId, member, settings.skipNeutralColors)
         return data ? paintFirstDesignText(tree, data) : tree
     }
 
     cleanup(
         transformComponent<ReactionsContentProps>(
             'MessageReactionsContent',
-            enabled,
+            () => getSettings().reactorsList,
             (tree, { channelId }) =>
                 React.createElement(
                     getReactionsGuildContext().Provider as any,
@@ -72,7 +81,7 @@ export function patchReactorsList(
         ),
         transformComponent<DiscordTagProps>(
             'DiscordTag',
-            enabled,
+            () => getSettings().reactorsList || getSettings().pollResults,
             useColoredTag,
             reportError,
         ),

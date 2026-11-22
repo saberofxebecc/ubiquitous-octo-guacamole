@@ -4,6 +4,8 @@ import { Design } from '@valenced/discord/design'
 import type { PluginApi } from '@valenced/plugins/types'
 import { patchChatMessages } from './patches/chatMessages'
 import { patchMentions } from './patches/mentions'
+import { patchMemberList } from './patches/memberList'
+import { patchPollResults } from './patches/pollResults'
 import { patchReactorsList } from './patches/reactorsList'
 import { patchTypingIndicator } from './patches/typingIndicator'
 import { patchVoiceUsers } from './patches/voiceUsers'
@@ -38,11 +40,13 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
         initGradientComponents(cleanup)
         patchChatMessages(getSettings, cleanup)
         patchMentions(getSettings, logDebug, cleanup)
+        patchMemberList(getSettings, reportError, cleanup)
         patchTypingIndicator(getSettings, logDebug, cleanup)
         patchVoiceUsers(getSettings, reportError, cleanup)
         patchReactorsList(getSettings, reportError, cleanup)
+        patchPollResults(getSettings, logDebug, cleanup)
 
-        logger.log('Role Color Everywhere v0.4.0 started')
+        logger.log('Role Color Everywhere v0.5.0 started')
     },
 
     SettingsComponent({ api }: { api: PluginApi<{ jsonStorage: RoleColorSettings }> }) {
@@ -82,6 +86,13 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
                         </TableRowGroup>
 
                         <TableRowGroup title="Presence & Sheets">
+                            <TableSwitchRow
+                                label="Member List Headers"
+                                subLabel="Show role colors in member list role group headers"
+                                icon={<TableRowAssetIcon name="TagsIcon" />}
+                                value={settings.memberList}
+                                onValueChange={toggle('memberList')}
+                            />
                             <TableSwitchRow
                                 label="Voice Users"
                                 subLabel="Show role colors in voice channel participant lists"

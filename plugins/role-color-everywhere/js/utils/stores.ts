@@ -28,6 +28,14 @@ export const getGuildMemberRequesterStore = () =>
 export const getGuildRoleStore = () =>
     Stores.GuildRoleStore as {
         getRole?: (guildId: string, roleId: string) => any
+        getSortedRoles?: (guildId: string) => any[]
+        getRolesSnapshot?: (guildId: string) => Record<string, any>
+        getRoles?: (guildId: string) => Record<string, any>
+    }
+
+export const getSelectedGuildStore = () =>
+    Stores.SelectedGuildStore as {
+        getGuildId?: () => string | null | undefined
     }
 
 export const getUserStore = () =>

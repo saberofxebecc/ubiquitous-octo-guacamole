@@ -39,7 +39,13 @@ function patchMentionNodes(nodes: any, guildId: string, skipNeutral: boolean): v
             patchMentionNodes(node.content, guildId, skipNeutral)
         }
         if (Array.isArray(node.items)) {
-            patchMentionNodes(node.items, guildId, skipNeutral)
+            for (const item of node.items) {
+                if (Array.isArray(item)) {
+                    patchMentionNodes(item, guildId, skipNeutral)
+                } else {
+                    patchMentionNodes([item], guildId, skipNeutral)
+                }
+            }
         }
     }
 }

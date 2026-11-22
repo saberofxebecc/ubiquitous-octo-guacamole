@@ -187,6 +187,28 @@ export function getMemberColorData(
     return getColorsFromMember(guildId, member, skipNeutral)
 }
 
+export function getGuildRoles(guildId: string): any[] {
+    const store = getGuildRoleStore()
+    return (
+        store?.getSortedRoles?.(guildId) ??
+        Object.values(store?.getRolesSnapshot?.(guildId) ?? store?.getRoles?.(guildId) ?? {})
+    )
+}
+
+export function getColorsFromRole(
+    guildId?: string | null,
+    role?: any,
+    skipNeutral = false,
+): ColorData | null {
+    if (!guildId || !role) return null
+    return buildColorData(
+        guildId,
+        role.colorString ?? normalizeHex(role.color),
+        role.colorStrings,
+        skipNeutral,
+    )
+}
+
 export function getRoleColorData(
     guildId?: string,
     roleId?: string,
@@ -194,7 +216,5 @@ export function getRoleColorData(
 ): ColorData | null {
     if (!guildId || !roleId) return null
     const role = getGuildRoleStore()?.getRole?.(guildId, roleId)
-    if (!role) return null
-
-    return buildColorData(guildId, role.colorString ?? normalizeHex(role.color), role.colorStrings, skipNeutral)
+    return getColorsFromRole(guildId, role, skipNeutral)
 }

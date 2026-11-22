@@ -2,6 +2,7 @@ export interface RoleColorSettings {
     chatMentions: boolean
     chatInputAndAutocomplete: boolean
     searchFilters: boolean
+    memberList: boolean
     voiceUsers: boolean
     typingIndicator: boolean
     reactorsList: boolean
@@ -14,6 +15,7 @@ export const DEFAULT_SETTINGS: RoleColorSettings = {
     chatMentions: true,
     chatInputAndAutocomplete: true,
     searchFilters: true,
+    memberList: true,
     voiceUsers: true,
     typingIndicator: true,
     reactorsList: true,
