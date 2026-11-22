@@ -1,7 +1,9 @@
+import { React } from '@valenced/react'
+import { Design } from '@valenced/discord/design'
 import type { RoleColorSettings } from '../types'
 import { getColorsFromRole, getGuildRoles } from '../utils/colors'
 import { paintFirstDesignText } from '../utils/gradient'
-import { transformComponent } from '../utils/react'
+import { replaceElement, transformComponent } from '../utils/react'
 import { getSelectedGuildStore } from '../utils/stores'
 
 interface UserSectionProps {
@@ -44,9 +46,17 @@ export function patchMemberList(
                 const resolvedGuildId = guildId ?? getSelectedGuildStore()?.getGuildId?.()
                 if (!resolvedGuildId) return tree
 
+                const enlarged = replaceElement(
+                    tree,
+                    el => el.type === Design?.Text,
+                    text =>
+                        React.cloneElement(text, {
+                            style: [text.props?.style, { fontSize: 16, lineHeight: 22, fontWeight: 'bold' }],
+                        }),
+                )
                 const role = findRoleByHeaderTitle(resolvedGuildId, title)
                 const data = getColorsFromRole(resolvedGuildId, role, getSettings().skipNeutralColors)
-                return data ? paintFirstDesignText(tree, data) : tree
+                return data ? paintFirstDesignText(enlarged, data) : enlarged
             },
             reportError,
         ),

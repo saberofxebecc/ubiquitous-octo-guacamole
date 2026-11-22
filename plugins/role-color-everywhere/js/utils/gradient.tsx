@@ -134,7 +134,8 @@ export function renderColoredText(
     const plainText =
         typeof rawChildren === 'string'
             ? rawChildren
-            : Array.isArray(rawChildren) && rawChildren.every((c: any) => typeof c === 'string')
+            : Array.isArray(rawChildren) &&
+                rawChildren.every((c: any) => typeof c === 'string' || typeof c === 'number')
                 ? rawChildren.join('')
                 : null
 
