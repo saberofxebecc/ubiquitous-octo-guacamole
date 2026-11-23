@@ -5,7 +5,7 @@
     "description": "Adds top role colors anywhere possible.",
     "author": "impala67",
     "icon": "PaintPaletteIcon",
-    "version": "0.5.9",
+    "version": "0.6.0",
     "dependencies": {
         "valenced.api": {
             "version": ">=1 <2"

@@ -7,6 +7,7 @@ import { patchMentions } from './patches/mentions'
 import { patchMemberList } from './patches/memberList'
 import { patchPollResults } from './patches/pollResults'
 import { patchReactorsList } from './patches/reactorsList'
+import { patchSearchFilters } from './patches/searchFilters'
 import { patchTypingIndicator } from './patches/typingIndicator'
 import { patchVoiceUsers } from './patches/voiceUsers'
 import { DEFAULT_SETTINGS, type RoleColorSettings } from './types'
@@ -40,13 +41,14 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
         initGradientComponents(cleanup)
         patchChatMessages(getSettings, cleanup)
         patchMentions(getSettings, logDebug, cleanup)
+        patchSearchFilters(getSettings, logDebug, cleanup, reportError)
         patchMemberList(getSettings, reportError, cleanup)
         patchTypingIndicator(getSettings, logDebug, cleanup)
         patchVoiceUsers(getSettings, reportError, cleanup)
         patchReactorsList(getSettings, reportError, cleanup)
         patchPollResults(getSettings, logDebug, cleanup, reportError)
 
-        logger.log('Role Color Everywhere v0.5.9 started')
+        logger.log('Role Color Everywhere v0.6.0 started')
     },
 
     SettingsComponent({ api }: { api: PluginApi<{ jsonStorage: RoleColorSettings }> }) {
