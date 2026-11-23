@@ -21,7 +21,7 @@ import { getAutocompleteGuildContext } from './reactorsList'
 let loggedLabelRender = false
 let labelDebugFn: ((msg: string, data?: unknown) => void) | null = null
 
-function paintFirstTextAny(tree: ReactNode, data: ColorData): ReactNode {
+function paintFirstTextAny(tree: ReactNode, data: ColorData): { node: ReactNode; hit: boolean } {
     let hitDesign = false
     replaceElement(
         tree,
@@ -31,39 +31,56 @@ function paintFirstTextAny(tree: ReactNode, data: ColorData): ReactNode {
             return el
         },
     )
-    if (hitDesign) return paintFirstDesignText(tree, data)
+    if (hitDesign) return { node: paintFirstDesignText(tree, data), hit: true }
 
     const RNText = ReactNative?.Text
-    if (!RNText) return tree
-    return replaceElement(
+    if (!RNText) return { node: tree, hit: false }
+
+    let hitRN = false
+    const rnNode = replaceElement(
         tree,
         el => el.type === RNText,
-        el =>
-            data.isGradient && canRenderGradients()
+        el => {
+            hitRN = true
+            return data.isGradient && canRenderGradients()
                 ? renderColoredText(el, data, el.key != null ? String(el.key) : undefined, true)
-                : React.cloneElement(el, { style: [el.props?.style, { color: data.colorString }] }),
+                : React.cloneElement(el, { style: [el.props?.style, { color: data.colorString }] })
+        },
     )
+    return { node: rnNode, hit: hitRN }
 }
 
 const applyRceLabelColor = (rendered: ReactNode, props: any): ReactNode => {
     const colorData: ColorData | undefined = props?.__rceColor
+    if (!colorData || !rendered) return rendered
+
+    const { node, hit } = paintFirstTextAny(rendered, colorData)
+    if (hit) return node
+
+    const depth = Number(props?.__rceDepth ?? 0)
+    if (depth < 3 && React.isValidElement(rendered)) {
+        const Wrapped = wrapComponent(rendered.type, applyRceLabelColor)
+        if (Wrapped) {
+            return React.createElement(Wrapped, {
+                ...(rendered.props as object),
+                __rceColor: colorData,
+                __rceDepth: depth + 1,
+                key: rendered.key ?? undefined,
+            })
+        }
+    }
+
     if (!loggedLabelRender && labelDebugFn) {
         loggedLabelRender = true
         const rType: any = React.isValidElement(rendered) ? rendered.type : undefined
-        labelDebugFn('AutocompleteLabel rendered', {
+        labelDebugFn('AutocompleteLabel fallback miss', {
+            depth,
             renderedType: rType
-                ? rType === Design?.Text
-                    ? 'Design.Text'
-                    : rType === ReactNative?.Text
-                        ? 'RN.Text'
-                        : rType.displayName || rType.name || rType.type?.name || typeof rType
+                ? rType.displayName || rType.name || rType.type?.name || typeof rType
                 : typeof rendered,
-            renderedProps: React.isValidElement(rendered)
-                ? Object.keys((rendered.props as any) ?? {})
-                : undefined,
         })
     }
-    return colorData ? paintFirstTextAny(rendered, colorData) : rendered
+    return rendered
 }
 
 function colorRowLabel(label: ReactNode, data: ColorData): ReactNode {
