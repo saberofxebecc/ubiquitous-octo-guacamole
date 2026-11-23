@@ -5,11 +5,11 @@
   "plugins": {
     "dev.saberofxebecc.role-color-everywhere": {
       "name": "Role Color Everywhere",
-      "description": "Adds top role colors anywhere possible.",
-      "author": "impala67",
-      "icon": "PaintPaletteIcon",
+      "description": "Dragging your server's role colors out of the member list and into practically everywhere else—gradients included.",
+      "author": "Impala67 <791007955104432158> (https://github.com/saberofxebecc \"GitHub\")",
+      "icon": "TeacupIcon",
       "channels": {
-        "latest": "0.6.1"
+        "latest": "1.0.0"
       },
       "versions": {
         "0.1.0": {
@@ -276,6 +276,19 @@
           "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.role-color-everywhere@0.6.1.zip",
           "sha256": "cd7a76fab7412051f99d78bff7d8e96074230081acd09a429cc73107aae12b6f",
           "size": 9629,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "1.0.0": {
+          "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.role-color-everywhere@1.0.0.zip",
+          "sha256": "455ac8bfbedf29a144b8d73380c14b56936d6b969fc28080d3c721ba24651e45",
+          "size": 9397,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"
