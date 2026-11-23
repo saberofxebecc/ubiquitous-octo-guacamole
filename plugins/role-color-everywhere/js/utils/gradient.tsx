@@ -89,8 +89,8 @@ function renderMaskedGradientText(
     })
 
     const containerStyle = allowShrink
-        ? { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', flexShrink: 1 }
-        : { flexDirection: 'row', alignItems: 'center', alignSelf: 'center' }
+        ? { flexDirection: 'row', alignItems: 'center', flexShrink: 1 }
+        : { flexDirection: 'row', alignItems: 'center' }
 
     return (
         <MaskedViewComp

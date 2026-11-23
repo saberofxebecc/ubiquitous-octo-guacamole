@@ -2,8 +2,9 @@ import type { Context, ReactNode } from 'react'
 import { React } from '@valenced/react'
 import type { RoleColorSettings } from '../types'
 import { getColorsFromMember, getGuildId } from '../utils/colors'
+import { Design } from '@valenced/discord/design'
 import { paintFirstDesignText } from '../utils/gradient'
-import { transformComponent } from '../utils/react'
+import { replaceElement, transformComponent } from '../utils/react'
 import { getGuildMemberRequesterStore, getGuildMemberStore } from '../utils/stores'
 
 interface ReactionsContentProps {
@@ -68,10 +69,28 @@ export function patchReactorsList(
             }
         }, [guildId, userId, member])
 
-        if (!guildId || !userId || !member) return tree
+        const isAutocomplete = Boolean(
+            autocompleteGuildId &&
+            settings.chatInputAndAutocomplete &&
+            !(reactionsGuildId && settings.reactorsList) &&
+            !(pollGuildId && settings.pollResults),
+        )
+
+        const sizedTree = isAutocomplete
+            ? replaceElement(
+                tree,
+                el => el.type === Design?.Text,
+                text =>
+                    React.cloneElement(text, {
+                        style: [text.props?.style, { fontSize: 12, lineHeight: 16 }],
+                    }),
+            )
+            : tree
+
+        if (!guildId || !userId || !member) return sizedTree
 
         const data = getColorsFromMember(guildId, member, settings.skipNeutralColors)
-        return data ? paintFirstDesignText(tree, data) : tree
+        return data ? paintFirstDesignText(sizedTree, data) : sizedTree
     }
 
     cleanup(
