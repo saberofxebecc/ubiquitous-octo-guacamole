@@ -45,51 +45,10 @@ function subscribeToMembers(callback: () => void) {
     }
 }
 
-function colorSearchLabel(label: ReactNode, data: ColorData): ReactNode {
-    if (typeof label === 'string') {
-        if (data.isGradient && canRenderGradients() && Design?.Text && ReactNative?.View) {
-            const textEl = React.createElement(
-                Design.Text,
-                { variant: 'text-md/semibold', numberOfLines: 1 },
-                label,
-            )
-            return React.createElement(
-                ReactNative.View,
-                { style: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 } },
-                renderColoredText(textEl, data, undefined, true),
-            )
-        }
-        if (Design?.Text && ReactNative?.Text) {
-            return React.createElement(
-                Design.Text,
-                { variant: 'text-md/semibold', numberOfLines: 1 },
-                React.createElement(ReactNative.Text, { style: { color: data.colorString } }, label),
-            )
-        }
-        return label
-    }
+let searchDebugFn: ((msg: string, data?: unknown) => void) | null = null
+let loggedUserRowRender = false
 
-    if (React.isValidElement(label)) {
-        return paintFirstDesignText(label, data)
-    }
-
-    return label
-}
-
-function paintSearchUserTree(tree: ReactNode, data: ColorData): { node: ReactNode; hit: boolean } {
-    let matchedTableRow = false
-    const withTableRow = replaceElement(
-        tree,
-        el => el.props != null && 'label' in el.props,
-        el => {
-            matchedTableRow = true
-            return React.cloneElement(el, {
-                label: colorSearchLabel(el.props.label, data),
-            })
-        },
-    )
-    if (matchedTableRow) return { node: withTableRow, hit: true }
-
+function paintFirstTextInTree(tree: ReactNode, data: ColorData): { node: ReactNode; hit: boolean } {
     let hitDesign = false
     replaceElement(
         tree,
@@ -118,27 +77,116 @@ function paintSearchUserTree(tree: ReactNode, data: ColorData): { node: ReactNod
     return { node: rnNode, hit: hitRN }
 }
 
-let searchDebugFn: ((msg: string, data?: unknown) => void) | null = null
-let loggedUserRowRender = false
+function wrapFirstCustomComponent(
+    tree: ReactNode,
+    data: ColorData,
+    depth: number,
+): { node: ReactNode; wrapped: boolean } {
+    let wrapped = false
+    const node = replaceElement(
+        tree,
+        el => typeof el.type === 'function' || (typeof el.type === 'object' && el.type !== null),
+        el => {
+            const Wrapped = wrapComponent(el.type, applySearchUserColor)
+            if (!Wrapped) return el
+            wrapped = true
+            return React.createElement(Wrapped, {
+                ...(el.props as object),
+                __rceColor: data,
+                __rceDepth: depth + 1,
+                key: el.key ?? undefined,
+            })
+        },
+    )
+    return { node, wrapped }
+}
+
+function colorSearchLabel(label: ReactNode, data: ColorData, depth: number): ReactNode {
+    if (typeof label === 'string') {
+        if (data.isGradient && canRenderGradients() && Design?.Text && ReactNative?.View) {
+            const textEl = React.createElement(
+                Design.Text,
+                { variant: 'text-md/semibold', numberOfLines: 1 },
+                label,
+            )
+            return React.createElement(
+                ReactNative.View,
+                { style: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 } },
+                renderColoredText(textEl, data, undefined, true),
+            )
+        }
+        if (Design?.Text && ReactNative?.Text) {
+            return React.createElement(
+                Design.Text,
+                { variant: 'text-md/semibold', numberOfLines: 1 },
+                React.createElement(ReactNative.Text, { style: { color: data.colorString } }, label),
+            )
+        }
+        return label
+    }
+
+    if (React.isValidElement(label)) {
+        const direct = paintFirstTextInTree(label, data)
+        if (direct.hit) return direct.node
+
+        if (depth < 3) {
+            const inner = wrapFirstCustomComponent(label, data, depth)
+            if (inner.wrapped) return inner.node
+        }
+    }
+
+    return label
+}
 
 const applySearchUserColor = (rendered: ReactNode, props: any): ReactNode => {
     const colorData: ColorData | undefined = props?.__rceColor
     if (!colorData || !rendered) return rendered
 
-    const { node, hit } = paintSearchUserTree(rendered, colorData)
-    if (!hit && !loggedUserRowRender && searchDebugFn) {
+    const depth = Number(props?.__rceDepth ?? 0)
+
+    if (!loggedUserRowRender && searchDebugFn && depth === 0) {
         loggedUserRowRender = true
+        let foundLabelType = 'none'
+        replaceElement(
+            rendered,
+            el => el.props != null && 'label' in el.props,
+            el => {
+                const lb = el.props.label
+                foundLabelType = React.isValidElement(lb)
+                    ? componentName(lb.type) ?? typeof lb.type
+                    : typeof lb
+                return el
+            },
+        )
         const rt: any = React.isValidElement(rendered) ? rendered.type : undefined
-        searchDebugFn('Search UserRow miss', {
-            renderedType: rt
-                ? rt.displayName || rt.name || rt.type?.name || typeof rt
-                : typeof rendered,
-            renderedProps: React.isValidElement(rendered)
-                ? Object.keys((rendered.props as any) ?? {})
-                : undefined,
+        searchDebugFn('Search UserRow rendered', {
+            rootType: rt ? componentName(rt) ?? typeof rt : typeof rendered,
+            foundLabelType,
         })
     }
-    return node
+
+    let matchedTableRow = false
+    const withTableRow = replaceElement(
+        rendered,
+        el => el.props != null && 'label' in el.props,
+        el => {
+            matchedTableRow = true
+            return React.cloneElement(el, {
+                label: colorSearchLabel(el.props.label, colorData, depth),
+            })
+        },
+    )
+    if (matchedTableRow) return withTableRow
+
+    const direct = paintFirstTextInTree(rendered, colorData)
+    if (direct.hit) return direct.node
+
+    if (depth < 3) {
+        const inner = wrapFirstCustomComponent(rendered, colorData, depth)
+        if (inner.wrapped) return inner.node
+    }
+
+    return rendered
 }
 
 export function patchSearchFilters(
@@ -239,7 +287,7 @@ export function patchSearchFilters(
                 )
                 if (wrappedUserRow) return withUserRow
 
-                return paintSearchUserTree(tree, data).node
+                return applySearchUserColor(tree, { __rceColor: data })
             },
             onError,
         ),
