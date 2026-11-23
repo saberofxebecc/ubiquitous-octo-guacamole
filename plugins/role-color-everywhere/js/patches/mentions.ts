@@ -3,7 +3,7 @@ import { React, ReactNative } from '@valenced/react'
 import { Design } from '@valenced/discord/design'
 import { getModules } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
-import { after, before, instead } from '@valenced/patcher'
+import { after, before } from '@valenced/patcher'
 import { beforeJSX } from '@valenced/react/jsx-runtime'
 import type { ColorData, RoleColorSettings } from '../types'
 import {
@@ -17,9 +17,6 @@ import { canRenderGradients, paintFirstDesignText, renderColoredText } from '../
 import { replaceElement, wrapComponent } from '../utils/react'
 import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
 import { getAutocompleteGuildContext } from './reactorsList'
-
-let loggedLabelRender = false
-let labelDebugFn: ((msg: string, data?: unknown) => void) | null = null
 
 function paintFirstTextAny(tree: ReactNode, data: ColorData): { node: ReactNode; hit: boolean } {
     let hitDesign = false
@@ -69,17 +66,6 @@ const applyRceLabelColor = (rendered: ReactNode, props: any): ReactNode => {
             })
         }
     }
-
-    if (!loggedLabelRender && labelDebugFn) {
-        loggedLabelRender = true
-        const rType: any = React.isValidElement(rendered) ? rendered.type : undefined
-        labelDebugFn('AutocompleteLabel fallback miss', {
-            depth,
-            renderedType: rType
-                ? rType.displayName || rType.name || rType.type?.name || typeof rType
-                : typeof rendered,
-        })
-    }
     return rendered
 }
 
@@ -127,13 +113,6 @@ function colorRowLabel(label: ReactNode, data: ColorData): ReactNode {
                 key: label.key ?? undefined,
             })
         }
-        if (labelDebugFn) {
-            const lt: any = label.type
-            labelDebugFn('AutocompleteLabel unwrap failed', {
-                typeofLt: typeof lt,
-                keys: lt && typeof lt === 'object' ? Object.keys(lt) : undefined,
-            })
-        }
     }
     return label
 }
@@ -156,12 +135,8 @@ function colorAutocompleteTree(tree: ReactNode, data: ColorData): ReactNode {
 
 export function patchMentions(
     getSettings: () => RoleColorSettings,
-    logDebug: (msg: string, data?: unknown) => void,
     cleanup: (...fns: (() => void)[]) => void,
 ) {
-    labelDebugFn = (msg, data) => {
-        if (getSettings().debugLogs) logDebug(msg, data)
-    }
     // 1. Hydrate user & role mention AST nodes (5980)
     cleanup(
         getModules(withProps('hydrateUserMention', 'hydrateRoleMention'), (mod: any) => {
@@ -169,6 +144,7 @@ export function patchMentions(
                 after(mod, 'hydrateUserMention', (result: any) => {
                     const settings = getSettings()
                     if (!settings.chatMentions || !result || typeof result !== 'object') return result
+                    if (!settings.gradients && result.roleColors) result.roleColors = null
                     if (result.colorString && result.roleColors) return result
 
                     const userId = result.userId ?? result.parsedUserId ?? result.id
@@ -186,13 +162,16 @@ export function patchMentions(
                             result.color = result.color ?? bgInt
                             result.roleColor = result.roleColor ?? bgInt
                         }
-                        result.roleColors = result.roleColors ?? data.colorInts
+                        if (settings.gradients) {
+                            result.roleColors = result.roleColors ?? data.colorInts
+                        }
                     }
                     return result
                 }),
                 after(mod, 'hydrateRoleMention', (result: any) => {
                     const settings = getSettings()
                     if (!settings.chatMentions || !result || typeof result !== 'object') return result
+                    if (!settings.gradients && result.roleColors) result.roleColors = null
                     if (result.colorString && result.roleColors) return result
 
                     const roleId = result.roleId ?? result.id
@@ -209,7 +188,9 @@ export function patchMentions(
                             result.color = result.color ?? bgInt
                             result.roleColor = result.roleColor ?? bgInt
                         }
-                        result.roleColors = result.roleColors ?? data.colorInts
+                        if (settings.gradients) {
+                            result.roleColors = result.roleColors ?? data.colorInts
+                        }
                     }
                     return result
                 }),
@@ -227,14 +208,19 @@ export function patchMentions(
                     const [node, , state] = args
                     if (!node || node.colorString) return args
 
-                    const guildOrChannel = node.guildId ?? state?.guildId ?? node.channelId ?? state?.channelId
+                    const guildOrChannel =
+                        node.guildId ?? state?.guildId ?? node.channelId ?? state?.channelId
                     const data = node.roleId
                         ? getRoleColorData(guildOrChannel, node.roleId, settings.skipNeutralColors)
-                        : getMemberColorData(node.userId ?? node.id, guildOrChannel, settings.skipNeutralColors)
+                        : getMemberColorData(
+                            node.userId ?? node.id,
+                            guildOrChannel,
+                            settings.skipNeutralColors,
+                        )
 
                     if (data) {
                         node.colorString = data.colorString
-                        node.roleColors = data.colorInts
+                        if (settings.gradients) node.roleColors = data.colorInts
                     }
                     return args
                 }),
@@ -242,77 +228,7 @@ export function patchMentions(
         }),
     )
 
-    // 3. Chat Input Box highlight nodes (13048)
-    cleanup(
-        getModules(withProps('getUsernameHighlightNodes', 'getRoleHighlightNodes'), (mod: any) => {
-            let loggedUserHL = false
-            let loggedRoleHL = false
-
-            cleanup(
-                instead(mod, 'getUsernameHighlightNodes', (args: any[], orig: (...a: any[]) => any) => {
-                    const result = orig(...args)
-                    const settings = getSettings()
-                    if (!settings.chatInputAndAutocomplete || !Array.isArray(result)) return result
-
-                    if (settings.debugLogs && !loggedUserHL && result.length > 0) {
-                        loggedUserHL = true
-                        logDebug('getUsernameHighlightNodes sample', {
-                            argTypes: args.map(a => (a && typeof a === 'object' ? Object.keys(a).slice(0, 8) : typeof a)),
-                            firstNode: result[0],
-                        })
-                    }
-
-                    const channelId = getSelectedChannelStore()?.getChannelId?.()
-                    const guildId = channelId ? getChannelStore()?.getChannel?.(channelId)?.guild_id : undefined
-                    if (!guildId) return result
-
-                    for (const node of result) {
-                        if (!node || typeof node !== 'object') continue
-                        const uid = node.userId ?? node.id ?? node.data?.userId ?? node.data?.id
-                        const data = getMemberColorData(uid, guildId, settings.skipNeutralColors)
-                        if (data) {
-                            if (node.style && typeof node.style === 'object') {
-                                node.style.color = data.colorString
-                            } else {
-                                node.color = data.colorString
-                            }
-                        }
-                    }
-                    return result
-                }),
-                instead(mod, 'getRoleHighlightNodes', (args: any[], orig: (...a: any[]) => any) => {
-                    const result = orig(...args)
-                    const settings = getSettings()
-                    if (!settings.chatInputAndAutocomplete || !Array.isArray(result)) return result
-
-                    if (settings.debugLogs && !loggedRoleHL && result.length > 0) {
-                        loggedRoleHL = true
-                        logDebug('getRoleHighlightNodes sample', { firstNode: result[0] })
-                    }
-
-                    const channelId = getSelectedChannelStore()?.getChannelId?.()
-                    const guildId = channelId ? getChannelStore()?.getChannel?.(channelId)?.guild_id : undefined
-                    if (!guildId) return result
-
-                    for (const node of result) {
-                        if (!node || typeof node !== 'object') continue
-                        const rid = node.roleId ?? node.id ?? node.data?.roleId ?? node.data?.id
-                        const data = getRoleColorData(guildId, rid, settings.skipNeutralColors)
-                        if (data) {
-                            if (node.style && typeof node.style === 'object') {
-                                node.style.color = data.colorString
-                            } else {
-                                node.color = data.colorString
-                            }
-                        }
-                    }
-                    return result
-                }),
-            )
-        }),
-    )
-
-    // 4. @ Mention Autocomplete Popup rows (13240.default.User & .Role)
+    // 3. @ Mention Autocomplete Popup rows (13240.default.User & .Role)
     cleanup(
         getModules(
             withProps('AUTOCOMPLETE_STICKER_NODE_SIZE', 'AUTOCOMPLETE_STICKER_NODE_MARGIN'),
@@ -320,12 +236,9 @@ export function patchMentions(
                 const renderers = mod?.default
                 if (!renderers || typeof renderers !== 'object') return
 
-                let loggedUser = false
-                let loggedRole = false
-
                 const transformUserRow = (tree: ReactNode, props: any): ReactNode => {
                     const settings = getSettings()
-                    if (!settings.chatInputAndAutocomplete || !tree) return tree
+                    if (!settings.mentionAutocomplete || !tree) return tree
 
                     const guildId =
                         props?.guildId ??
@@ -335,19 +248,6 @@ export function patchMentions(
                     const data = guildId
                         ? getMemberColorData(userId, guildId, settings.skipNeutralColors, props?.member)
                         : null
-
-                    if (settings.debugLogs && !loggedUser) {
-                        loggedUser = true
-                        const label = React.isValidElement(tree) ? (tree.props as any)?.label : undefined
-                        const lt: any = React.isValidElement(label) ? label.type : undefined
-                        logDebug('Autocomplete User row', {
-                            guildId,
-                            userId,
-                            hasColor: Boolean(data),
-                            labelType: lt ? (lt.displayName || lt.name || lt.type?.name || typeof lt) : typeof label,
-                            labelProps: React.isValidElement(label) ? Object.keys((label.props as any) ?? {}) : undefined,
-                        })
-                    }
 
                     const colored = data ? colorAutocompleteTree(tree, data) : tree
                     return guildId
@@ -361,7 +261,7 @@ export function patchMentions(
 
                 const transformRoleRow = (tree: ReactNode, props: any): ReactNode => {
                     const settings = getSettings()
-                    if (!settings.chatInputAndAutocomplete || !tree) return tree
+                    if (!settings.mentionAutocomplete || !tree) return tree
 
                     const guildId =
                         props?.guildId ??
@@ -374,15 +274,6 @@ export function patchMentions(
                             ? getRoleColorData(guildId, roleObj.id, settings.skipNeutralColors)
                             : null)
 
-                    if (settings.debugLogs && !loggedRole) {
-                        loggedRole = true
-                        logDebug('Autocomplete Role row', {
-                            propKeys: props ? Object.keys(props) : [],
-                            guildId,
-                            hasColor: Boolean(data),
-                        })
-                    }
-
                     return data ? colorAutocompleteTree(tree, data) : tree
                 }
 
@@ -390,7 +281,7 @@ export function patchMentions(
                     const origUser = renderers.User
                     cleanup(
                         beforeJSX(origUser, ([elType, props, key]: [any, any, any?]) => {
-                            if (!getSettings().chatInputAndAutocomplete) return [elType, props, key]
+                            if (!getSettings().mentionAutocomplete) return [elType, props, key]
                             const Wrapped = wrapComponent(origUser, transformUserRow)
                             return Wrapped ? [Wrapped, props, key] : [elType, props, key]
                         }),
@@ -401,7 +292,7 @@ export function patchMentions(
                     const origRole = renderers.Role
                     cleanup(
                         beforeJSX(origRole, ([elType, props, key]: [any, any, any?]) => {
-                            if (!getSettings().chatInputAndAutocomplete) return [elType, props, key]
+                            if (!getSettings().mentionAutocomplete) return [elType, props, key]
                             const Wrapped = wrapComponent(origRole, transformRoleRow)
                             return Wrapped ? [Wrapped, props, key] : [elType, props, key]
                         }),

@@ -55,7 +55,7 @@ export function patchReactorsList(
         const guildId =
             (reactionsGuildId && settings.reactorsList ? reactionsGuildId : undefined) ??
             (pollGuildId && settings.pollResults ? pollGuildId : undefined) ??
-            (autocompleteGuildId && settings.chatInputAndAutocomplete ? autocompleteGuildId : undefined)
+            (autocompleteGuildId && settings.mentionAutocomplete ? autocompleteGuildId : undefined)
         const userId = user?.id
 
         const member = React.useSyncExternalStore(
@@ -71,7 +71,7 @@ export function patchReactorsList(
 
         const isAutocomplete = Boolean(
             autocompleteGuildId &&
-            settings.chatInputAndAutocomplete &&
+            settings.mentionAutocomplete &&
             !(reactionsGuildId && settings.reactorsList) &&
             !(pollGuildId && settings.pollResults),
         )
@@ -107,7 +107,10 @@ export function patchReactorsList(
         ),
         transformComponent<DiscordTagProps>(
             'DiscordTag',
-            () => getSettings().reactorsList || getSettings().pollResults,
+            () =>
+                getSettings().reactorsList ||
+                getSettings().pollResults ||
+                getSettings().mentionAutocomplete,
             useColoredTag,
             reportError,
         ),

@@ -2,10 +2,10 @@
     "format": 1,
     "id": "dev.saberofxebecc.role-color-everywhere",
     "name": "Role Color Everywhere",
-    "description": "Adds top role colors anywhere possible.",
-    "author": "impala67",
-    "icon": "PaintPaletteIcon",
-    "version": "0.6.1",
+    "description": "Dragging your server's role colors out of the member list and into practically everywhere else—gradients included.",
+    "author": "Impala67 <791007955104432158> (https://github.com/saberofxebecc \"GitHub\")",
+    "icon": "TeacupIcon",
+    "version": "1.0.0",
     "dependencies": {
         "valenced.api": {
             "version": ">=1 <2"

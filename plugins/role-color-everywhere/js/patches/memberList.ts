@@ -11,6 +11,14 @@ interface UserSectionProps {
     guildId?: string
 }
 
+const HEADER_SIZE_STYLES: Record<number, { fontSize: number; lineHeight: number } | undefined> = {
+    0: { fontSize: 12, lineHeight: 16 }, // Ant-Sized
+    1: { fontSize: 14, lineHeight: 18 }, // Squintable
+    2: undefined,                        // Stock
+    3: { fontSize: 18, lineHeight: 24 }, // Big (default)
+    4: { fontSize: 22, lineHeight: 28 }, // Overcompensating
+}
+
 const MEMBER_COUNT_SUFFIX = /\s*[—–-]\s*[\d\s.,\u00a0\u202f]+$/
 
 function findRoleByHeaderTitle(guildId: string, title: string) {
@@ -46,17 +54,24 @@ export function patchMemberList(
                 const resolvedGuildId = guildId ?? getSelectedGuildStore()?.getGuildId?.()
                 if (!resolvedGuildId) return tree
 
-                const enlarged = replaceElement(
+                const settings = getSettings()
+                const sizeStyle = HEADER_SIZE_STYLES[settings.memberListHeaderSize]
+                const weightStyle = settings.memberListBoldHeaders
+                    ? { fontWeight: 'bold' as const }
+                    : { fontWeight: 'normal' as const }
+
+                const styledTree = replaceElement(
                     tree,
                     el => el.type === Design?.Text,
                     text =>
                         React.cloneElement(text, {
-                            style: [text.props?.style, { fontSize: 18, lineHeight: 24, fontWeight: 'bold' }],
+                            style: [text.props?.style, sizeStyle, weightStyle],
                         }),
                 )
+
                 const role = findRoleByHeaderTitle(resolvedGuildId, title)
-                const data = getColorsFromRole(resolvedGuildId, role, getSettings().skipNeutralColors)
-                return data ? paintFirstDesignText(enlarged, data) : enlarged
+                const data = getColorsFromRole(resolvedGuildId, role, settings.skipNeutralColors)
+                return data ? paintFirstDesignText(styledTree, data) : styledTree
             },
             reportError,
         ),

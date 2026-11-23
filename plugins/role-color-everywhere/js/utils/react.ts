@@ -1,99 +1,7 @@
 import type { ComponentType, ElementType, FC, ReactElement, ReactNode } from 'react'
 import { React, ReactJSXRuntime } from '@valenced/react'
 import { instead } from '@valenced/patcher'
-import { beforeJSX, insteadJSX } from '@valenced/react/jsx-runtime'
-
-export type RenderHook = (result: ReactNode, args: any[], self?: any) => ReactNode
-
-const wrappedFunctions = new WeakMap<(...args: any[]) => any, (props: any) => any>()
-const createElementTargets = new WeakMap<(...args: any[]) => any, (props: any) => any>()
-let unpatchCreateElement: (() => void) | null = null
-let activeTargetCount = 0
-
-function ensureCreateElementHook() {
-    if (unpatchCreateElement) return
-    unpatchCreateElement = instead(
-        React,
-        'createElement',
-        (args: any[], orig: (...a: any[]) => any) => {
-            const type = args[0]
-            if (typeof type === 'function') {
-                const wrapped = createElementTargets.get(type)
-                if (wrapped) args[0] = wrapped
-            }
-            return orig(...args)
-        },
-    )
-}
-
-export function patchComponentRender(
-    targetOrModule: any,
-    keyOrHook: string | RenderHook,
-    maybeHook?: RenderHook,
-): () => void {
-    const target = typeof keyOrHook === 'string' ? targetOrModule?.[keyOrHook] : targetOrModule
-    const hook = (typeof keyOrHook === 'string' ? maybeHook : keyOrHook) as RenderHook | undefined
-    if (!target || !hook) return () => { }
-
-    if (typeof target === 'object' && typeof target.type === 'function') {
-        return instead(target, 'type', (args: any[], orig: (...a: any[]) => ReactNode) => {
-            const result = orig(...args)
-            return hook(result, args)
-        })
-    }
-
-    if (typeof target === 'object' && typeof target.render === 'function') {
-        return instead(target, 'render', (args: any[], orig: (...a: any[]) => ReactNode) => {
-            const result = orig(...args)
-            return hook(result, args)
-        })
-    }
-
-    if (typeof target === 'function' && target.prototype?.isReactComponent) {
-        return instead(
-            target.prototype,
-            'render',
-            function (this: any, args: any[], orig: (...a: any[]) => ReactNode) {
-                const result = orig.apply(this, args)
-                return hook(result, [this?.props, ...args], this)
-            },
-        )
-    }
-
-    if (typeof target === 'function') {
-        let wrapped = wrappedFunctions.get(target)
-        if (!wrapped) {
-            wrapped = (props: any) => hook(target(props), [props])
-            Object.defineProperty(wrapped, 'name', {
-                value: target.displayName || target.name || 'WrappedComponent',
-            })
-            wrappedFunctions.set(target, wrapped)
-        }
-
-        createElementTargets.set(target, wrapped)
-        activeTargetCount++
-        ensureCreateElementHook()
-
-        const unpatchJsx = insteadJSX(
-            target,
-            ([, props, key]: [any, any, any?], jsx: (...a: any[]) => any) =>
-                jsx(wrapped, props, key),
-        )
-
-        return () => {
-            unpatchJsx()
-            createElementTargets.delete(target)
-            activeTargetCount--
-            if (activeTargetCount <= 0 && unpatchCreateElement) {
-                unpatchCreateElement()
-                unpatchCreateElement = null
-                activeTargetCount = 0
-            }
-        }
-    }
-
-    return () => { }
-}
+import { beforeJSX } from '@valenced/react/jsx-runtime'
 
 export function componentName(type: unknown): string | undefined {
     if (typeof type === 'function') {
@@ -143,9 +51,6 @@ function startJSXWaiter() {
     }
 }
 
-/**
- * Fires once when a component with `name` is first rendered via JSX, then unhooks jsx/jsxs.
- */
 export function onComponentType(name: string, callback: (type: ElementType) => void) {
     let callbacks = waiting.get(name)
     if (!callbacks) waiting.set(name, (callbacks = new Set()))
@@ -200,10 +105,6 @@ export function wrapComponent<P extends object>(
     return Wrapped
 }
 
-/**
- * Intercepts JSX elements for component `name` (even unexported internal components)
- * and transforms their rendered tree with `transform(tree, props)`.
- */
 export function transformComponent<P extends object>(
     name: string,
     enabled: () => boolean,
@@ -298,14 +199,6 @@ export function mapReactElements(
     }
 
     return current
-}
-
-export function applyTextColor(el: ReactElement<any>, color: string): ReactElement<any> {
-    const props = el.props ?? {}
-    const existingStyle = props.style
-    return React.cloneElement(el, {
-        style: existingStyle ? [existingStyle, { color }] : { color },
-    })
 }
 
 export function wrapListRenderItem(

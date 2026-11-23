@@ -9,6 +9,11 @@ import {
 } from './stores'
 
 let cachedProcessColorStrings: ((cs: RoleColorStrings) => RoleColorInts) | null | undefined
+let gradientsEnabled = true
+
+export function setGradientsEnabled(enabled: boolean) {
+    gradientsEnabled = enabled
+}
 
 function getProcessColorStrings() {
     if (cachedProcessColorStrings !== undefined) return cachedProcessColorStrings
@@ -89,7 +94,7 @@ function buildColorData(
     if (colorInt === undefined) return null
 
     const isGradient = Boolean(
-        hasEnhancedRoleColors(guildId) && rawColorStrings?.secondaryColor,
+        gradientsEnabled && hasEnhancedRoleColors(guildId) && rawColorStrings?.secondaryColor,
     )
 
     const colorStrings: RoleColorStrings =
