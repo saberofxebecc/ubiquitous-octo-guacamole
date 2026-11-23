@@ -18,8 +18,53 @@ import { replaceElement, wrapComponent } from '../utils/react'
 import { getChannelStore, getSelectedChannelStore } from '../utils/stores'
 import { getAutocompleteGuildContext } from './reactorsList'
 
-const applyRceLabelColor = (rendered: ReactNode, props: any): ReactNode =>
-    props?.__rceColor ? paintFirstDesignText(rendered, props.__rceColor) : rendered
+let loggedLabelRender = false
+let labelDebugFn: ((msg: string, data?: unknown) => void) | null = null
+
+function paintFirstTextAny(tree: ReactNode, data: ColorData): ReactNode {
+    let hitDesign = false
+    replaceElement(
+        tree,
+        el => el.type === Design?.Text,
+        el => {
+            hitDesign = true
+            return el
+        },
+    )
+    if (hitDesign) return paintFirstDesignText(tree, data)
+
+    const RNText = ReactNative?.Text
+    if (!RNText) return tree
+    return replaceElement(
+        tree,
+        el => el.type === RNText,
+        el =>
+            data.isGradient && canRenderGradients()
+                ? renderColoredText(el, data, el.key != null ? String(el.key) : undefined, true)
+                : React.cloneElement(el, { style: [el.props?.style, { color: data.colorString }] }),
+    )
+}
+
+const applyRceLabelColor = (rendered: ReactNode, props: any): ReactNode => {
+    const colorData: ColorData | undefined = props?.__rceColor
+    if (!loggedLabelRender && labelDebugFn) {
+        loggedLabelRender = true
+        const rType: any = React.isValidElement(rendered) ? rendered.type : undefined
+        labelDebugFn('AutocompleteLabel rendered', {
+            renderedType: rType
+                ? rType === Design?.Text
+                    ? 'Design.Text'
+                    : rType === ReactNative?.Text
+                        ? 'RN.Text'
+                        : rType.displayName || rType.name || rType.type?.name || typeof rType
+                : typeof rendered,
+            renderedProps: React.isValidElement(rendered)
+                ? Object.keys((rendered.props as any) ?? {})
+                : undefined,
+        })
+    }
+    return colorData ? paintFirstTextAny(rendered, colorData) : rendered
+}
 
 function colorRowLabel(label: ReactNode, data: ColorData): ReactNode {
     if (typeof label === 'string') {
@@ -65,6 +110,13 @@ function colorRowLabel(label: ReactNode, data: ColorData): ReactNode {
                 key: label.key ?? undefined,
             })
         }
+        if (labelDebugFn) {
+            const lt: any = label.type
+            labelDebugFn('AutocompleteLabel unwrap failed', {
+                typeofLt: typeof lt,
+                keys: lt && typeof lt === 'object' ? Object.keys(lt) : undefined,
+            })
+        }
     }
     return label
 }
@@ -90,6 +142,9 @@ export function patchMentions(
     logDebug: (msg: string, data?: unknown) => void,
     cleanup: (...fns: (() => void)[]) => void,
 ) {
+    labelDebugFn = (msg, data) => {
+        if (getSettings().debugLogs) logDebug(msg, data)
+    }
     // 1. Hydrate user & role mention AST nodes (5980)
     cleanup(
         getModules(withProps('hydrateUserMention', 'hydrateRoleMention'), (mod: any) => {

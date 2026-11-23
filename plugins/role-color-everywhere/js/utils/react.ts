@@ -167,21 +167,36 @@ export function wrapComponent<P extends object>(
 ): ComponentType<P> | undefined {
     if (typeof type !== 'function' && (typeof type !== 'object' || type === null)) return undefined
 
-    const memoized = typeof type === 'object'
-    const render = memoized ? (type as { type?: unknown }).type : type
-    if (typeof render !== 'function') return undefined
-
     let cache = wrappedByTransform.get(transform)
     if (!cache) wrappedByTransform.set(transform, (cache = new WeakMap()))
 
     let Wrapped = cache.get(type as object)
-    if (!Wrapped) {
-        const Render = (props: P) => transform((render as FC<P>)(props) as ReactNode, props)
-        Wrapped = memoized
-            ? React.memo(Render, (type as { compare?: any }).compare)
-            : Render
-        cache.set(type as object, Wrapped)
+    if (Wrapped) return Wrapped
+
+    if (typeof type === 'function') {
+        const Render = (props: P) => transform((type as FC<P>)(props) as ReactNode, props)
+        Wrapped = Render
+    } else {
+        const obj = type as { type?: any; render?: any; compare?: any }
+        if (typeof obj.type === 'function') {
+            const Render = (props: P) => transform(obj.type(props) as ReactNode, props)
+            Wrapped = React.memo(Render, obj.compare)
+        } else if (typeof obj.render === 'function') {
+            Wrapped = React.forwardRef((props: any, ref: any) =>
+                transform(obj.render(props, ref) as ReactNode, props),
+            ) as unknown as ComponentType<P>
+        } else if (typeof obj.type === 'object' && typeof obj.type?.render === 'function') {
+            const innerRender = obj.type.render
+            const Forwarded = React.forwardRef((props: any, ref: any) =>
+                transform(innerRender(props, ref) as ReactNode, props),
+            )
+            Wrapped = React.memo(Forwarded, obj.compare) as unknown as ComponentType<P>
+        } else {
+            return undefined
+        }
     }
+
+    cache.set(type as object, Wrapped)
     return Wrapped
 }
 
