@@ -153,12 +153,12 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
                                                 onSlidingComplete={setHeaderSize}
                                                 startIcon={
                                                     <Pressable onPress={() => setHeaderSize(activeSizeIndex - 1)}>
-                                                        <TableRowAssetIcon name="CircleMinusIcon-Primary" />
+                                                        <TableRowAssetIcon name="CircleMinusIcon-primary" />
                                                     </Pressable>
                                                 }
                                                 endIcon={
                                                     <Pressable onPress={() => setHeaderSize(activeSizeIndex + 1)}>
-                                                        <TableRowAssetIcon name="CirclePlusIcon-Primary" />
+                                                        <TableRowAssetIcon name="CirclePlusIcon-primary" />
                                                     </Pressable>
                                                 }
                                             />
