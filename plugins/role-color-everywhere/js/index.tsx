@@ -111,7 +111,7 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
                                 onValueChange={toggle('chatMentions')}
                             />
                             <TableSwitchRow
-                                label="@ Mention Autocomplete"
+                                label="Mention Autocomplete"
                                 subLabel="Color user and role suggestions when typing @."
                                 icon={<TableRowAssetIcon name="AtIcon" />}
                                 value={settings.mentionAutocomplete}
@@ -123,7 +123,7 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
                             <TableSwitchRow
                                 label="Member List Headers"
                                 subLabel="Color role group headers in the member list."
-                                icon={<TableRowAssetIcon name="TrophyIcon" />}
+                                icon={<TableRowAssetIcon name="CrownIcon" />}
                                 value={settings.memberList}
                                 onValueChange={toggle('memberList')}
                             />
@@ -212,14 +212,14 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
                             <TableSwitchRow
                                 label="Reactions List"
                                 subLabel="Color users in the message reactions sheet."
-                                icon={<TableRowAssetIcon name="SuperReactionIcon" />}
+                                icon={<TableRowAssetIcon name="EmojiZanyFaceIcon" />}
                                 value={settings.reactorsList}
                                 onValueChange={toggle('reactorsList')}
                             />
                             <TableSwitchRow
                                 label="Poll Results"
                                 subLabel="Color voters in poll results."
-                                icon={<TableRowAssetIcon name="HammerIcon" />}
+                                icon={<TableRowAssetIcon name="PollsIcon" />}
                                 value={settings.pollResults}
                                 onValueChange={toggle('pollResults')}
                             />
@@ -235,8 +235,8 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
                             />
                             <TableSwitchRow
                                 label="Skip Neutral Colors"
-                                subLabel="Ignore black, white, and gray roles when picking colors."
-                                icon={<TableRowAssetIcon name="DenyIcon" />}
+                                subLabel="Ignore black, white, and dreary gray roles."
+                                icon={<TableRowAssetIcon name="EyeSlashIcon" />}
                                 value={settings.skipNeutralColors}
                                 onValueChange={toggle('skipNeutralColors')}
                             />
