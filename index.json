@@ -3,6 +3,30 @@
   "name": "saberofxebecc's Valenced Plugins",
   "description": "Custom plugins for Valenced.",
   "plugins": {
+    "dev.saberofxebecc.irc-colors": {
+      "name": "IRC Colors",
+      "description": "Assigns deterministic IRC-style username colors in DMs, servers, and the member list.",
+      "author": "Impala67 <791007955104432158> (https://github.com/saberofxebecc \"GitHub\")",
+      "icon": "MagicWandIcon",
+      "channels": {
+        "latest": "1.0.0"
+      },
+      "versions": {
+        "1.0.0": {
+          "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.irc-colors@1.0.0.zip",
+          "sha256": "a60195324c384e74ee8ecc4e1fd5e466a9c6fc59257f6b28d5f0e43d72d4a9fc",
+          "size": 4711,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        }
+      }
+    },
     "dev.saberofxebecc.role-color-everywhere": {
       "name": "Role Color Everywhere",
       "description": "Dragging your server's role colors out of the member list and into practically everywhere else—gradients included.",
