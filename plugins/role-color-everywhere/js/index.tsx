@@ -1,7 +1,9 @@
-import { ScrollView, View } from 'react-native'
-import { Page, TableRowAssetIcon } from '@valenced/components'
+import { Pressable, ScrollView, View } from 'react-native'
+import { FormSwitch, Page, TableRowAssetIcon } from '@valenced/components'
 import { Design } from '@valenced/discord/design'
 import type { PluginApi } from '@valenced/plugins/types'
+import { formatVersion } from '@valenced/plugins/utils'
+import { React } from '@valenced/react'
 import { patchChatMessages } from './patches/chatMessages'
 import { patchMemberList } from './patches/memberList'
 import { patchMentions } from './patches/mentions'
@@ -12,6 +14,8 @@ import { patchVoiceUsers } from './patches/voiceUsers'
 import { DEFAULT_SETTINGS, type RoleColorSettings } from './types'
 import { setGradientsEnabled } from './utils/colors'
 import { initGradientComponents } from './utils/gradient'
+
+const STOCK_HEADER_SIZE_INDEX = 2
 
 const HEADER_SIZE_LABELS = [
     'Ant-Sized',
@@ -66,7 +70,7 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
         patchReactorsList(getSettings, reportError, cleanup)
         patchPollResults(getSettings, logDebug, cleanup, reportError)
 
-        logger.log('Role Color Everywhere v1.0.0 started')
+        logger.log(`Role Color Everywhere v${formatVersion(plugin.manifest.version)} started`)
     },
 
     stop({ plugin }) {
@@ -74,144 +78,186 @@ export default plugin<{ jsonStorage: RoleColorSettings }>({
     },
 
     SettingsComponent({ api }: { api: PluginApi<{ jsonStorage: RoleColorSettings }> }) {
-        const { TableRowGroup, TableSwitchRow, TableRow, Slider, Text } = Design
+        const { TableRowGroup, TableSwitchRow, TableRow, Slider, Stack, Button, Text } = Design
         const settings = { ...DEFAULT_SETTINGS, ...api.jsonStorage.use() }
+
+        const savedSizeIndex = Math.max(
+            0,
+            Math.min(HEADER_SIZE_LABELS.length - 1, Math.round(settings.memberListHeaderSize)),
+        )
+        const [dragSize, setDragSize] = React.useState<number | null>(null)
+        const activeSizeIndex = dragSize ?? savedSizeIndex
 
         const toggle = (key: keyof RoleColorSettings) => (value: boolean) => {
             api.jsonStorage.set({ [key]: value })
         }
 
-        const headerSizeIndex = Math.max(
-            0,
-            Math.min(HEADER_SIZE_LABELS.length - 1, Math.round(settings.memberListHeaderSize)),
-        )
+        const setHeaderSize = (index: number) => {
+            const clamped = Math.max(0, Math.min(HEADER_SIZE_LABELS.length - 1, Math.round(index)))
+            setDragSize(null)
+            api.jsonStorage.set({ memberListHeaderSize: clamped })
+        }
 
         return (
             <Page>
                 <ScrollView showsVerticalScrollIndicator={false}>
-                    <TableRowGroup title="Chat">
-                        <TableSwitchRow
-                            label="Chat Mentions"
-                            subLabel="Paints @mentions in messages, replies, and embeds so pings actually look intentional."
-                            icon={<TableRowAssetIcon name="ChatIcon" />}
-                            value={settings.chatMentions}
-                            onValueChange={toggle('chatMentions')}
-                        />
-                        <TableSwitchRow
-                            label="@ Mention Autocomplete"
-                            subLabel="Colors user & role suggestions when typing @—because guessing who's a mod shouldn't be a gamble."
-                            icon={<TableRowAssetIcon name="AtIcon" />}
-                            value={settings.mentionAutocomplete}
-                            onValueChange={toggle('mentionAutocomplete')}
-                        />
-                    </TableRowGroup>
+                    <Stack spacing={20}>
+                        <TableRowGroup title="Chat">
+                            <TableSwitchRow
+                                label="Chat Mentions"
+                                subLabel="Color @mentions in messages, replies, and embeds."
+                                icon={<TableRowAssetIcon name="ChatIcon" />}
+                                value={settings.chatMentions}
+                                onValueChange={toggle('chatMentions')}
+                            />
+                            <TableSwitchRow
+                                label="@ Mention Autocomplete"
+                                subLabel="Color user and role suggestions when typing @."
+                                icon={<TableRowAssetIcon name="AtIcon" />}
+                                value={settings.mentionAutocomplete}
+                                onValueChange={toggle('mentionAutocomplete')}
+                            />
+                        </TableRowGroup>
 
-                    <TableRowGroup title="Members & Presence">
-                        <TableSwitchRow
-                            label="Member List Headers"
-                            subLabel="Tints role group titles in the member list instead of leaving them all identically dull."
-                            icon={<TableRowAssetIcon name="TrophyIcon" />}
-                            value={settings.memberList}
-                            onValueChange={toggle('memberList')}
-                        />
-                        {settings.memberList && (
-                            <>
+                        <TableRowGroup title="Members">
+                            <TableSwitchRow
+                                label="Member List Headers"
+                                subLabel="Color role group headers in the member list."
+                                icon={<TableRowAssetIcon name="TrophyIcon" />}
+                                value={settings.memberList}
+                                onValueChange={toggle('memberList')}
+                            />
+                            {settings.memberList && (
                                 <TableRow
-                                    label="Role Header Size"
-                                    subLabel="How loudly your role headers announce themselves above members."
-                                    icon={<TableRowAssetIcon name="LettersIcon" />}
-                                    trailing={
-                                        <Text variant="text-md/semibold" color="text-muted">
-                                            {HEADER_SIZE_LABELS[headerSizeIndex]}
-                                        </Text>
+                                    label={
+                                        <Stack spacing={14}>
+                                            <View
+                                                style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                }}
+                                            >
+                                                <Text variant="text-md/semibold">Role Header Size</Text>
+                                                <Text variant="text-md/medium" color="text-muted">
+                                                    {HEADER_SIZE_LABELS[activeSizeIndex]}
+                                                </Text>
+                                            </View>
+
+                                            <Slider
+                                                minimumValue={0}
+                                                maximumValue={4}
+                                                step={1}
+                                                value={activeSizeIndex}
+                                                onValueChange={val => setDragSize(Math.round(val))}
+                                                onSlidingComplete={setHeaderSize}
+                                                startIcon={
+                                                    <Pressable onPress={() => setHeaderSize(activeSizeIndex - 1)}>
+                                                        <TableRowAssetIcon name="CircleMinusIcon-Primary" />
+                                                    </Pressable>
+                                                }
+                                                endIcon={
+                                                    <Pressable onPress={() => setHeaderSize(activeSizeIndex + 1)}>
+                                                        <TableRowAssetIcon name="CirclePlusIcon-Primary" />
+                                                    </Pressable>
+                                                }
+                                            />
+
+                                            <Button
+                                                variant="secondary"
+                                                size="md"
+                                                text="Reset to default"
+                                                disabled={activeSizeIndex === STOCK_HEADER_SIZE_INDEX}
+                                                onPress={() => setHeaderSize(STOCK_HEADER_SIZE_INDEX)}
+                                            />
+
+                                            <View
+                                                style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    paddingTop: 2,
+                                                }}
+                                            >
+                                                <Text variant="text-md/semibold">Bold Role Headers</Text>
+                                                <FormSwitch
+                                                    value={settings.memberListBoldHeaders}
+                                                    onValueChange={toggle('memberListBoldHeaders')}
+                                                />
+                                            </View>
+                                        </Stack>
                                     }
                                 />
-                                <View style={{ paddingLeft: 52, paddingRight: 16, paddingBottom: 10 }}>
-                                    <Slider
-                                        minimumValue={0}
-                                        maximumValue={4}
-                                        step={1}
-                                        value={headerSizeIndex}
-                                        onValueChange={(value: number) =>
-                                            api.jsonStorage.set({
-                                                memberListHeaderSize: Math.round(value),
-                                            })
-                                        }
-                                    />
-                                </View>
-                                <TableSwitchRow
-                                    label="Bold Role Headers"
-                                    subLabel="Keep role headers heavy and assertive, or turn off for polite regular weight."
-                                    value={settings.memberListBoldHeaders}
-                                    onValueChange={toggle('memberListBoldHeaders')}
-                                />
-                            </>
-                        )}
-                        <TableSwitchRow
-                            label="Voice Users"
-                            subLabel="Colors participants in voice channels, Active Now, preview sheets, and active call tiles."
-                            icon={<TableRowAssetIcon name="VoiceNormalIcon" />}
-                            value={settings.voiceUsers}
-                            onValueChange={toggle('voiceUsers')}
-                        />
-                        <TableSwitchRow
-                            label="Typing Indicator"
-                            subLabel="Reveals who's currently writing a novel in chat (plays nicely with Better Typing Indicators)."
-                            icon={<TableRowAssetIcon name="KeyboardIcon" />}
-                            value={settings.typingIndicator}
-                            onValueChange={toggle('typingIndicator')}
-                        />
-                    </TableRowGroup>
+                            )}
+                        </TableRowGroup>
 
-                    <TableRowGroup title="Sheets">
-                        <TableSwitchRow
-                            label="Reactions List"
-                            subLabel="Colors everyone who reacted to a message—even in servers big enough to need progressive fetching."
-                            icon={<TableRowAssetIcon name="SuperReactionIcon" />}
-                            value={settings.reactorsList}
-                            onValueChange={toggle('reactorsList')}
-                        />
-                        <TableSwitchRow
-                            label="Poll Results"
-                            subLabel="Exposes who voted for what in full role-colored glory."
-                            icon={<TableRowAssetIcon name="HammerIcon" />}
-                            value={settings.pollResults}
-                            onValueChange={toggle('pollResults')}
-                        />
-                    </TableRowGroup>
+                        <TableRowGroup title="Presence">
+                            <TableSwitchRow
+                                label="Voice Users"
+                                subLabel="Color participants in voice channels, sheets, and calls."
+                                icon={<TableRowAssetIcon name="VoiceNormalIcon" />}
+                                value={settings.voiceUsers}
+                                onValueChange={toggle('voiceUsers')}
+                            />
+                            <TableSwitchRow
+                                label="Typing Indicator"
+                                subLabel="Color users currently typing in chat."
+                                icon={<TableRowAssetIcon name="KeyboardIcon" />}
+                                value={settings.typingIndicator}
+                                onValueChange={toggle('typingIndicator')}
+                            />
+                        </TableRowGroup>
 
-                    <TableRowGroup title="Appearance">
-                        <TableSwitchRow
-                            label="Gradient Role Colors"
-                            subLabel="Renders multi-stop Enhanced Role Color gradients instead of settling for flat single colors."
-                            icon={<TableRowAssetIcon name="MagicWandIcon" />}
-                            value={settings.gradients}
-                            onValueChange={toggle('gradients')}
-                        />
-                        <TableSwitchRow
-                            label="Skip Neutral Colors"
-                            subLabel="Ignores near-black, near-white, and dreary gray roles."
-                            icon={<TableRowAssetIcon name="DenyIcon" />}
-                            value={settings.skipNeutralColors}
-                            onValueChange={toggle('skipNeutralColors')}
-                        />
-                    </TableRowGroup>
+                        <TableRowGroup title="Sheets">
+                            <TableSwitchRow
+                                label="Reactions List"
+                                subLabel="Color users in the message reactions sheet."
+                                icon={<TableRowAssetIcon name="SuperReactionIcon" />}
+                                value={settings.reactorsList}
+                                onValueChange={toggle('reactorsList')}
+                            />
+                            <TableSwitchRow
+                                label="Poll Results"
+                                subLabel="Color voters in poll results."
+                                icon={<TableRowAssetIcon name="HammerIcon" />}
+                                value={settings.pollResults}
+                                onValueChange={toggle('pollResults')}
+                            />
+                        </TableRowGroup>
 
-                    <TableRowGroup title="Advanced">
-                        <TableSwitchRow
-                            label="Debug Logs"
-                            subLabel="Writes diagnostic chatter to Valenced Debug Logs. Leave off unless something actually misbehaves."
-                            icon={<TableRowAssetIcon name="SlashBoxIcon" />}
-                            value={settings.debugLogs}
-                            onValueChange={toggle('debugLogs')}
-                        />
-                    </TableRowGroup>
+                        <TableRowGroup title="Appearance">
+                            <TableSwitchRow
+                                label="Gradient Role Colors"
+                                subLabel="Render multi-stop gradients for Enhanced Role Colors."
+                                icon={<TableRowAssetIcon name="MagicWandIcon" />}
+                                value={settings.gradients}
+                                onValueChange={toggle('gradients')}
+                            />
+                            <TableSwitchRow
+                                label="Skip Neutral Colors"
+                                subLabel="Ignore black, white, and gray roles when picking colors."
+                                icon={<TableRowAssetIcon name="DenyIcon" />}
+                                value={settings.skipNeutralColors}
+                                onValueChange={toggle('skipNeutralColors')}
+                            />
+                        </TableRowGroup>
 
-                    <View style={{ alignItems: 'center', paddingVertical: 16 }}>
-                        <Text variant="text-xs/normal" color="text-muted">
-                            Role Color Everywhere v1.0.0
-                        </Text>
-                    </View>
+                        <TableRowGroup title="Advanced">
+                            <TableSwitchRow
+                                label="Debug Logs"
+                                subLabel="Write diagnostic logs for troubleshooting."
+                                icon={<TableRowAssetIcon name="SlashBoxIcon" />}
+                                value={settings.debugLogs}
+                                onValueChange={toggle('debugLogs')}
+                            />
+                        </TableRowGroup>
+
+                        <View style={{ alignItems: 'center', paddingBottom: 16 }}>
+                            <Text variant="text-xs/normal" color="text-muted">
+                                Role Color Everywhere v{formatVersion(api.plugin.manifest.version)}
+                            </Text>
+                        </View>
+                    </Stack>
                 </ScrollView>
             </Page>
         )
