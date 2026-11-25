@@ -11,12 +11,14 @@ import {
 } from '@valenced/discord/actions'
 import { Design } from '@valenced/discord/design'
 import { Stores } from '@valenced/discord/flux'
+import { BottomSheet } from '@valenced/externals/gorhom'
+import { Clipboard } from '@valenced/externals/react-native-clipboard'
 import { JsonStorageUpdateMode } from '@valenced/json-storage'
 import { reloadApp } from '@valenced/modules/native/app'
 import { formatVersion } from '@valenced/plugins/utils'
 import { React } from '@valenced/react'
 import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
-import { Pressable, ScrollView, View } from 'react-native'
+import { Image, Pressable, ScrollView, View } from 'react-native'
 import { patchChatMessages } from './patches/chatMessages'
 import { patchMemberList } from './patches/memberList'
 import { DEFAULT_SETTINGS } from './types'
@@ -68,6 +70,37 @@ function clearReloadToastTimer() {
 	}
 }
 
+function CopySeedButton({ seed }: { seed: string }) {
+	const { useTooltip } = Design
+	const anchorRef = React.useRef<View>(null)
+	const [visible, setVisible] = React.useState(false)
+
+	React.useEffect(() => {
+		if (!visible) return
+		const t = setTimeout(() => setVisible(false), 1500)
+		return () => clearTimeout(t)
+	}, [visible])
+
+	useTooltip(anchorRef, {
+		label: 'Copied!',
+		position: 'top',
+		visible,
+	})
+
+	return (
+		<View ref={anchorRef} collapsable={false}>
+			<Pressable
+				onPress={() => {
+					Clipboard.setString(seed)
+					setVisible(true)
+				}}
+			>
+				<TableRowAssetIcon name="CopyIcon" />
+			</Pressable>
+		</View>
+	)
+}
+
 function showApplyToasts() {
 	clearReloadToastTimer()
 
@@ -94,6 +127,7 @@ function showApplyToasts() {
 interface GuildEntry {
 	id: string
 	name: string
+	iconUrl: string | null
 }
 
 function getSortedGuilds(): GuildEntry[] {
@@ -101,8 +135,16 @@ function getSortedGuilds(): GuildEntry[] {
 	const raw: any[] =
 		store?.getGuildsArray?.() ?? Object.values(store?.getGuilds?.() ?? {})
 	return raw
-		.filter((g): g is { id: string; name?: string } => Boolean(g?.id))
-		.map(g => ({ id: String(g.id), name: String(g.name ?? g.id) }))
+		.filter((g): g is { id: string; name?: string; icon?: string | null } =>
+			Boolean(g?.id),
+		)
+		.map(g => ({
+			id: String(g.id),
+			name: String(g.name ?? g.id),
+			iconUrl: g.icon
+				? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64`
+				: null,
+		}))
 		.sort((a, b) =>
 			a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
 		)
@@ -113,13 +155,8 @@ function ServerPickerSheet({
 }: {
 	jsonStorage: JsonStorage<IrcColorsSettings>
 }) {
-	const {
-		ActionSheet,
-		BottomSheetTitleHeader,
-		Button,
-		TableRow,
-		TableRowGroup,
-	} = Design
+	const { ActionSheet, BottomSheetTitleHeader, TableRow } = Design
+	const { BottomSheetFlatList } = BottomSheet
 	const settings = { ...DEFAULT_SETTINGS, ...jsonStorage.use() }
 	const [query, setQuery] = React.useState('')
 
@@ -135,26 +172,17 @@ function ServerPickerSheet({
 
 	return (
 		<ActionSheet
+			startExpanded
+			scrollable
+			contentHeight={540}
 			header={
 				<BottomSheetTitleHeader
 					title="Select Servers"
 					subtitle={`${selectedSet.size} selected`}
-					trailing={
-						<Button
-							size="sm"
-							variant="secondary"
-							text="Done"
-							onPress={() =>
-								ActionSheetActionCreators.hideActionSheet(
-									SERVER_PICKER_SHEET_KEY,
-								)
-							}
-						/>
-					}
 				/>
 			}
 		>
-			<View style={{ paddingHorizontal: 16, paddingBottom: 16, gap: 12 }}>
+			<View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
 				<SearchInput
 					placeholder="Search servers or IDs..."
 					value={query}
@@ -162,35 +190,43 @@ function ServerPickerSheet({
 					isClearable
 					onClear={() => setQuery('')}
 				/>
-				<ScrollView
-					style={{ maxHeight: 420 }}
-					showsVerticalScrollIndicator={false}
-				>
-					<TableRowGroup>
-						{filtered.map(guild => {
-							const checked = selectedSet.has(guild.id)
-							const onToggle = () => {
-								jsonStorage.set({
-									serverFilterList: toggleGuildInList(
-										settings.serverFilterList,
-										guild.id,
-										guild.name,
-									),
-								})
-							}
-							return (
-								<TableRow
-									key={guild.id}
-									label={guild.name}
-									subLabel={guild.id}
-									onPress={onToggle}
-									trailing={<Checkbox checked={checked} onToggle={onToggle} />}
-								/>
-							)
-						})}
-					</TableRowGroup>
-				</ScrollView>
 			</View>
+			<BottomSheetFlatList
+				data={filtered}
+				keyExtractor={(item: GuildEntry) => item.id}
+				style={{ height: 420 }}
+				keyboardShouldPersistTaps="handled"
+				renderItem={({ item: guild }: { item: GuildEntry }) => {
+					const checked = selectedSet.has(guild.id)
+					const onToggle = () => {
+						jsonStorage.set({
+							serverFilterList: toggleGuildInList(
+								settings.serverFilterList,
+								guild.id,
+								guild.name,
+							),
+						})
+					}
+					return (
+						<TableRow
+							label={guild.name}
+							subLabel={guild.id}
+							icon={
+								guild.iconUrl ? (
+									<Image
+										source={{ uri: guild.iconUrl }}
+										style={{ width: 32, height: 32, borderRadius: 16 }}
+									/>
+								) : (
+									<TableRowAssetIcon name="HashmarkIcon" />
+								)
+							}
+							onPress={onToggle}
+							trailing={<Checkbox checked={checked} onToggle={onToggle} />}
+						/>
+					)
+				}}
+			/>
 		</ActionSheet>
 	)
 }
@@ -615,6 +651,11 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 											value={seedDraft}
 											placeholder="Default (empty)"
 											isClearable
+											trailingIcon={
+												settings.seed
+													? () => <CopySeedButton seed={settings.seed} />
+													: undefined
+											}
 											onClear={() => setSeedDraft('')}
 											onChange={setSeedDraft}
 										/>
