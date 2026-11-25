@@ -5,9 +5,13 @@ import {
 	SearchInput,
 	TableRowAssetIcon,
 } from '@valenced/components'
-import { ActionSheetActionCreators } from '@valenced/discord/actions'
+import {
+	ActionSheetActionCreators,
+	ToastActionCreators,
+} from '@valenced/discord/actions'
 import { Design } from '@valenced/discord/design'
 import { Stores } from '@valenced/discord/flux'
+import { reloadApp } from '@valenced/modules/native/app'
 import { formatVersion } from '@valenced/plugins/utils'
 import { React } from '@valenced/react'
 import { Pressable, ScrollView, View } from 'react-native'
@@ -25,6 +29,41 @@ import type {
 } from './types'
 
 const SERVER_PICKER_SHEET_KEY = 'irc-colors-server-picker'
+const SEED_CHARS =
+	'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*-_+=?'
+
+let bootSignature = ''
+
+function getReloadSignature(s: IrcColorsSettings): string {
+	return JSON.stringify([
+		s.applyInDms,
+		s.applyInServers,
+		s.serverColorMode,
+		s.serverFilterMode,
+		s.serverFilterList,
+		s.memberListColors,
+		s.colorStyle,
+		Math.round(s.saturation),
+		Math.round(s.lightness),
+		s.seed,
+	])
+}
+
+function generateRandomSeed(): string {
+	const len = 6 + Math.floor(Math.random() * 8)
+	let out = ''
+	for (let i = 0; i < len; i++) {
+		out += SEED_CHARS[Math.floor(Math.random() * SEED_CHARS.length)]
+	}
+	return out
+}
+
+function showReloadToast(text: string) {
+	ToastActionCreators.open('irc-colors-reload-hint', {
+		text,
+		variant: 'default',
+	})
+}
 
 interface GuildEntry {
 	id: string
@@ -146,6 +185,8 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 			...jsonStorage.cache,
 		})
 
+		bootSignature = getReloadSignature(getSettings())
+
 		const logDebug = (msg: string, data?: unknown) => {
 			if (getSettings().debugLogs) {
 				logger.log(msg, data !== undefined ? JSON.stringify(data) : '')
@@ -160,7 +201,7 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 		}
 
 		patchChatMessages(getSettings, logDebug, cleanup)
-		patchMemberList(getSettings, logDebug, reportError, cleanup)
+		patchMemberList(jsonStorage, getSettings, logDebug, reportError, cleanup)
 
 		logger.log(`IRC Colors v${formatVersion(plugin.manifest.version)} started`)
 	},
@@ -224,14 +265,21 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 			api.jsonStorage.set({ lightness: clamped })
 		}
 
-		const updateSeed = (value: string) => {
+		const needsReload =
+			bootSignature !== '' && getReloadSignature(settings) !== bootSignature
+		const isSeedDirty = seedDraft !== settings.seed
+
+		const applySeed = (value: string, message: string) => {
 			setSeedDraft(value)
 			api.jsonStorage.set({ seed: value })
+			showReloadToast(message)
 		}
 
 		const shuffleSeed = () => {
-			const next = String(Math.floor(100000 + Math.random() * 900000))
-			updateSeed(next)
+			applySeed(
+				generateRandomSeed(),
+				'Seed shuffled — tap Reload Discord at the top to refresh open chats.',
+			)
 		}
 
 		const updateFilterList = (value: string) => {
@@ -251,6 +299,30 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 			<Page>
 				<ScrollView showsVerticalScrollIndicator={false}>
 					<Stack spacing={20}>
+						{needsReload && (
+							<TableRowGroup title="Reload Recommended">
+								<TableRow
+									label={
+										<Stack spacing={10}>
+											<Text variant="text-md/semibold">
+												Reload Discord to apply to open chats
+											</Text>
+											<Text variant="text-sm/normal" color="text-muted">
+												Already-loaded messages keep cached colors until reload.
+												Your saved settings are preserved.
+											</Text>
+											<Button
+												variant="primary"
+												size="md"
+												text="Reload Discord"
+												onPress={reloadApp}
+											/>
+										</Stack>
+									}
+								/>
+							</TableRowGroup>
+						)}
+
 						<TableRowGroup title="Where to Apply">
 							<TableSwitchRow
 								label="Color users in DMs"
@@ -494,8 +566,8 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 											value={seedDraft}
 											placeholder="Default (empty)"
 											isClearable
-											onClear={() => updateSeed('')}
-											onChange={updateSeed}
+											onClear={() => setSeedDraft('')}
+											onChange={setSeedDraft}
 										/>
 										<View style={{ flexDirection: 'row', gap: 10 }}>
 											<View style={{ flex: 1 }}>
@@ -512,11 +584,28 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 													variant="secondary"
 													size="md"
 													text="Reset"
-													disabled={!seedDraft}
-													onPress={() => updateSeed('')}
+													disabled={!seedDraft && !settings.seed}
+													onPress={() =>
+														applySeed(
+															'',
+															'Seed cleared — tap Reload Discord at the top to refresh open chats.',
+														)
+													}
 												/>
 											</View>
 										</View>
+										<Button
+											variant="secondary"
+											size="md"
+											text="Apply Seed"
+											disabled={!isSeedDirty}
+											onPress={() =>
+												applySeed(
+													seedDraft,
+													'Seed applied — tap Reload Discord at the top to refresh open chats.',
+												)
+											}
+										/>
 									</Stack>
 								}
 							/>

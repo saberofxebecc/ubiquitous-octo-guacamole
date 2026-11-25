@@ -1,6 +1,7 @@
 import { Design } from '@valenced/discord/design'
 import { React } from '@valenced/react'
 import { beforeJSX } from '@valenced/react/jsx-runtime'
+import { DEFAULT_SETTINGS } from '../types'
 import { getUserIrcColor } from '../utils/colors'
 import { isGuildAllowed } from '../utils/guildFilter'
 import {
@@ -8,6 +9,7 @@ import {
 	replaceFirstElement,
 	wrapWithRender,
 } from '../utils/react'
+import type { JsonStorage } from '@valenced/json-storage'
 import type { IrcColorsSettings } from '../types'
 
 interface UserRowProps {
@@ -22,6 +24,7 @@ interface UserRowProps {
 }
 
 export function patchMemberList(
+	jsonStorage: JsonStorage<IrcColorsSettings>,
 	getSettings: () => IrcColorsSettings,
 	logDebug: (msg: string, data?: unknown) => void,
 	reportError: (e: unknown) => void,
@@ -34,8 +37,11 @@ export function patchMemberList(
 		props: UserRowProps,
 		callOriginal: (nextProps: UserRowProps) => React.ReactNode,
 	): React.ReactNode => {
+		// Subscribe unconditionally so mounted UserRow items re-render when settings change
+		const liveCache = jsonStorage.use()
+
 		try {
-			const settings = getSettings()
+			const settings: IrcColorsSettings = { ...DEFAULT_SETTINGS, ...liveCache }
 			if (!settings.memberListColors || !props) return callOriginal(props)
 
 			const userId = props.user?.id
