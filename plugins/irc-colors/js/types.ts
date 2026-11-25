@@ -1,10 +1,13 @@
 export type ServerColorMode = 'no-role-only' | 'everyone'
+export type ServerFilterMode = 'all' | 'include' | 'exclude'
 export type ColorStyle = 'solid' | 'gradient'
 
 export interface IrcColorsSettings {
 	applyInDms: boolean
 	applyInServers: boolean
 	serverColorMode: ServerColorMode
+	serverFilterMode: ServerFilterMode
+	serverFilterList: string
 	memberListColors: boolean
 	colorStyle: ColorStyle
 	saturation: number
@@ -17,6 +20,8 @@ export const DEFAULT_SETTINGS: IrcColorsSettings = {
 	applyInDms: true,
 	applyInServers: true,
 	serverColorMode: 'no-role-only',
+	serverFilterMode: 'all',
+	serverFilterList: '',
 	memberListColors: true,
 	colorStyle: 'solid',
 	saturation: 100,

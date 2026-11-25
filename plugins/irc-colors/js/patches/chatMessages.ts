@@ -2,6 +2,7 @@ import { getModules } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
 import { after, HookPriority } from '@valenced/patcher'
 import { getUserIrcColor } from '../utils/colors'
+import { isGuildAllowed } from '../utils/guildFilter'
 import type { IrcColorsSettings } from '../types'
 
 function applyToMessage(
@@ -21,6 +22,7 @@ function applyToMessage(
 		if (!settings.applyInDms) return false
 	} else {
 		if (!settings.applyInServers) return false
+		if (!isGuildAllowed(guildId, settings)) return false
 		if (settings.serverColorMode === 'no-role-only') {
 			const hasRoleColor = msg.roleColor != null || msg.roleColors != null
 			if (hasRoleColor) return false
