@@ -71,9 +71,10 @@ function clearReloadToastTimer() {
 }
 
 function CopySeedButton({ seed }: { seed: string }) {
-	const { useTooltip } = Design
+	const { IconButton, useTooltip } = Design
 	const anchorRef = React.useRef<View>(null)
 	const [visible, setVisible] = React.useState(false)
+	const copyIconId = getAssetIdByName('CopyIcon')
 
 	React.useEffect(() => {
 		if (!visible) return
@@ -87,16 +88,20 @@ function CopySeedButton({ seed }: { seed: string }) {
 		visible,
 	})
 
+	if (!copyIconId) return null
+
 	return (
 		<View ref={anchorRef} collapsable={false}>
-			<Pressable
+			<IconButton
+				icon={copyIconId}
+				variant="secondary"
+				size="md"
+				label="Copy applied seed"
 				onPress={() => {
 					Clipboard.setString(seed)
 					setVisible(true)
 				}}
-			>
-				<TableRowAssetIcon name="CopyIcon" />
-			</Pressable>
+			/>
 		</View>
 	)
 }
@@ -645,20 +650,33 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 							<TableRow
 								label={
 									<Stack spacing={12}>
-										<TextInput
-											label="Color Seed"
-											description="Type literally anything — numbers, gibberish, emojis, existential dread."
-											value={seedDraft}
-											placeholder="Default (empty)"
-											isClearable
-											trailingIcon={
-												settings.seed
-													? () => <CopySeedButton seed={settings.seed} />
-													: undefined
-											}
-											onClear={() => setSeedDraft('')}
-											onChange={setSeedDraft}
-										/>
+										<Stack spacing={8}>
+											<Text variant="text-md/semibold">Color Seed</Text>
+											<View
+												style={{
+													flexDirection: 'row',
+													alignItems: 'center',
+													gap: 8,
+												}}
+											>
+												<View style={{ flex: 1 }}>
+													<TextInput
+														value={seedDraft}
+														placeholder="Default (empty)"
+														isClearable
+														onClear={() => setSeedDraft('')}
+														onChange={setSeedDraft}
+													/>
+												</View>
+												{settings.seed ? (
+													<CopySeedButton seed={settings.seed} />
+												) : null}
+											</View>
+											<Text variant="text-xs/normal" color="text-muted">
+												Type literally anything — numbers, gibberish, emojis,
+												existential dread.
+											</Text>
+										</Stack>
 										<View style={{ flexDirection: 'row', gap: 10 }}>
 											<View style={{ flex: 1 }}>
 												<Button
