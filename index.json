@@ -7,15 +7,28 @@
       "name": "IRC Colors",
       "description": "Assigns deterministic IRC-style username colors in DMs, servers, and the member list.",
       "author": "Impala67 <791007955104432158> (https://github.com/saberofxebecc \"GitHub\")",
-      "icon": "MagicWandIcon",
+      "icon": "BurgerIcon",
       "channels": {
-        "latest": "1.0.0"
+        "latest": "1.1.0"
       },
       "versions": {
         "1.0.0": {
           "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.irc-colors@1.0.0.zip",
           "sha256": "a60195324c384e74ee8ecc4e1fd5e466a9c6fc59257f6b28d5f0e43d72d4a9fc",
           "size": 4711,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "1.1.0": {
+          "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.irc-colors@1.1.0.zip",
+          "sha256": "807287247425e7df67b6a7196dbe871ecc427d83081312e65d5395dfb2b7a3d4",
+          "size": 6613,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"
