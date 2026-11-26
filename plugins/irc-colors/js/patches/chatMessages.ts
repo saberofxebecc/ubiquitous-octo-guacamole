@@ -29,7 +29,11 @@ function applyToMessage(
 		}
 	}
 
-	const irc = getUserIrcColor(authorId, settings)
+	const irc = getUserIrcColor(
+		authorId,
+		{ channelId: msg.channelId ?? null, guildId },
+		settings,
+	)
 	msg.usernameColor = irc.primaryInt
 	msg.colorString = irc.primaryInt
 	msg.roleColors = settings.colorStyle === 'gradient' ? irc.colorInts : null

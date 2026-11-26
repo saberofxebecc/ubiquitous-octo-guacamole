@@ -9,12 +9,14 @@ import {
 	replaceFirstElement,
 	wrapWithRender,
 } from '../utils/react'
+import { getSelectedChannelStore } from '../utils/stores'
 import type { JsonStorage } from '@valenced/json-storage'
 import type { IrcColorsSettings } from '../types'
 
 interface UserRowProps {
 	user?: { id?: string }
 	guildId?: string
+	channelId?: string
 	usernameColor?: string
 	roleColors?: {
 		primaryColor?: string
@@ -62,13 +64,21 @@ export function patchMemberList(
 				}
 			}
 
-			const irc = getUserIrcColor(userId, settings)
+			const channelId = !guildId
+				? (props.channelId ??
+					getSelectedChannelStore()?.getChannelId?.() ??
+					null)
+				: null
+
+			const irc = getUserIrcColor(userId, { channelId, guildId }, settings)
 			if (!loggedSample) {
 				loggedSample = true
 				logDebug('Sample UserRow colored', {
 					guildId: guildId ?? null,
+					channelId,
 					hadRoleColor: hasRoleColor,
 					colorStyle: settings.colorStyle,
+					colorAssignment: settings.colorAssignment,
 				})
 			}
 

@@ -1,6 +1,10 @@
 export type ServerColorMode = 'no-role-only' | 'everyone'
 export type ServerFilterMode = 'all' | 'include' | 'exclude'
 export type ColorStyle = 'solid' | 'gradient'
+export type ColorAssignmentMode =
+	| 'per-context'
+	| 'dm-context-guild-global'
+	| 'global'
 
 export interface IrcColorsSettings {
 	applyInDms: boolean
@@ -9,6 +13,7 @@ export interface IrcColorsSettings {
 	serverFilterMode: ServerFilterMode
 	serverFilterList: string
 	memberListColors: boolean
+	colorAssignment: ColorAssignmentMode
 	colorStyle: ColorStyle
 	saturation: number
 	lightness: number
@@ -23,6 +28,7 @@ export const DEFAULT_SETTINGS: IrcColorsSettings = {
 	serverFilterMode: 'all',
 	serverFilterList: '',
 	memberListColors: true,
+	colorAssignment: 'per-context',
 	colorStyle: 'solid',
 	saturation: 100,
 	lightness: 70,

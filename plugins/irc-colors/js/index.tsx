@@ -22,10 +22,12 @@ import { Image, Pressable, ScrollView, View } from 'react-native'
 import { patchChatMessages } from './patches/chatMessages'
 import { patchMemberList } from './patches/memberList'
 import { DEFAULT_SETTINGS } from './types'
+import { initColorPools } from './utils/colors'
 import { parseGuildIds, toggleGuildInList } from './utils/guildFilter'
 import type { JsonStorage } from '@valenced/json-storage'
 import type { PluginApi } from '@valenced/plugins/types'
 import type {
+	ColorAssignmentMode,
 	ColorStyle,
 	IrcColorsSettings,
 	ServerColorMode,
@@ -47,6 +49,7 @@ function getReloadSignature(s: IrcColorsSettings): string {
 		s.serverFilterMode,
 		s.serverFilterList,
 		s.memberListColors,
+		s.colorAssignment,
 		s.colorStyle,
 		Math.round(s.saturation),
 		Math.round(s.lightness),
@@ -286,6 +289,7 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 			}
 		}
 
+		cleanup(initColorPools(plugin.manifest.id))
 		patchChatMessages(getSettings, logDebug, cleanup)
 		patchMemberList(jsonStorage, getSettings, logDebug, reportError, cleanup)
 
@@ -541,6 +545,30 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 										/>
 									</TableRowGroup>
 								)}
+
+							<TableRadioGroup<ColorAssignmentMode>
+								title="Color Assignment"
+								value={settings.colorAssignment}
+								onChange={colorAssignment =>
+									api.jsonStorage.set({ colorAssignment })
+								}
+							>
+								<TableRadioRow
+									label="Smart Per-Chat (Recommended)"
+									subLabel="Spaces participants apart inside each DM, Group Chat, and Server."
+									value="per-context"
+								/>
+								<TableRadioRow
+									label="Smart DMs, Global Servers"
+									subLabel="Spaces DMs and Group Chats, with one global color per user across servers."
+									value="dm-context-guild-global"
+								/>
+								<TableRadioRow
+									label="Classic Global"
+									subLabel="Every user keeps the same hash-based color everywhere."
+									value="global"
+								/>
+							</TableRadioGroup>
 
 							<TableRadioGroup<ColorStyle>
 								title="Color Style"
