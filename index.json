@@ -9,7 +9,7 @@
       "author": "Impala67 <791007955104432158> (https://github.com/saberofxebecc \"GitHub\")",
       "icon": "BurgerIcon",
       "channels": {
-        "latest": "1.1.4"
+        "latest": "1.1.5"
       },
       "versions": {
         "1.0.0": {
@@ -81,6 +81,19 @@
           "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.irc-colors@1.1.4.zip",
           "sha256": "3cc2378265e4f1f732dc95ae55e19d9e8b09e7d1789cb9e9f379cc1cae60121d",
           "size": 7645,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "1.1.5": {
+          "url": "https://saberofxebecc.github.io/ubiquitous-octo-guacamole/pool/dev.saberofxebecc.irc-colors@1.1.5.zip",
+          "sha256": "c9306c1eaf3227db60626c5d0b6318cf8ef6e86be144ff956c103456ab6d87e4",
+          "size": 7657,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"
