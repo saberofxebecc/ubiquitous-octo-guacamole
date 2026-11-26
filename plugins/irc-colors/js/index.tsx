@@ -96,7 +96,6 @@ function CopySeedButton({ seed }: { seed: string }) {
 				icon={copyIconId}
 				variant="secondary"
 				size="md"
-				label="Copy applied seed"
 				onPress={() => {
 					Clipboard.setString(seed)
 					setVisible(true)
@@ -303,6 +302,7 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 		api: PluginApi<{ jsonStorage: IrcColorsSettings }>
 	}) {
 		const {
+			LayerScope,
 			TableRowGroup,
 			TableSwitchRow,
 			TableRadioGroup,
@@ -386,347 +386,352 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 
 		return (
 			<Page>
-				<ScrollView showsVerticalScrollIndicator={false}>
-					<Stack spacing={20}>
-						{needsReload && (
-							<TableRowGroup title="Reload Recommended">
+				<LayerScope zIndex={100}>
+					<ScrollView showsVerticalScrollIndicator={false}>
+						<Stack spacing={20}>
+							{needsReload && (
+								<TableRowGroup title="Reload Recommended">
+									<TableRow
+										label={
+											<Stack spacing={10}>
+												<Text variant="text-md/semibold">
+													Reload Discord to apply to open chats
+												</Text>
+												<Text variant="text-sm/normal" color="text-muted">
+													Already-loaded messages keep cached colors until
+													reload. Your saved settings are preserved.
+												</Text>
+												<Button
+													variant={'experimental_premium-primary' as any}
+													size="md"
+													icon={refreshIconId}
+													text="Reload Discord"
+													onPress={reloadApp}
+												/>
+											</Stack>
+										}
+									/>
+								</TableRowGroup>
+							)}
+
+							<TableRowGroup title="Where to Apply">
+								<TableSwitchRow
+									label="Color users in DMs"
+									subLabel="Give every participant a unique color in DMs and group chats."
+									icon={<TableRowAssetIcon name="ForumIcon" />}
+									value={settings.applyInDms}
+									onValueChange={applyInDms =>
+										api.jsonStorage.set({ applyInDms })
+									}
+								/>
+								<TableSwitchRow
+									label="Color users in Servers"
+									subLabel="Apply unique IRC colors to usernames in server chats."
+									icon={<TableRowAssetIcon name="HashmarkIcon" />}
+									value={settings.applyInServers}
+									onValueChange={applyInServers =>
+										api.jsonStorage.set({ applyInServers })
+									}
+								/>
+								<TableSwitchRow
+									label="Member List"
+									subLabel="Apply IRC colors to usernames in the member list."
+									icon={<TableRowAssetIcon name="TopicsIcon" />}
+									value={settings.memberListColors}
+									onValueChange={memberListColors =>
+										api.jsonStorage.set({ memberListColors })
+									}
+								/>
+							</TableRowGroup>
+
+							{settings.applyInServers && (
+								<TableRadioGroup<ServerColorMode>
+									title="Server Mode"
+									value={settings.serverColorMode}
+									onChange={serverColorMode =>
+										api.jsonStorage.set({ serverColorMode })
+									}
+								>
+									<TableRadioRow
+										label="Only users without role colors"
+										subLabel="Keep existing role colors and color everyone else."
+										value="no-role-only"
+									/>
+									<TableRadioRow
+										label="Color everyone in servers"
+										subLabel="Override existing server role colors with IRC colors."
+										value="everyone"
+									/>
+								</TableRadioGroup>
+							)}
+
+							{settings.applyInServers && (
+								<TableRadioGroup<ServerFilterMode>
+									title="Server Filter"
+									value={settings.serverFilterMode}
+									onChange={serverFilterMode =>
+										api.jsonStorage.set({ serverFilterMode })
+									}
+								>
+									<TableRadioRow
+										label="All Servers"
+										subLabel="Apply across every server you are in."
+										icon={<TableRowAssetIcon name="HashmarkIcon" />}
+										value="all"
+									/>
+									<TableRadioRow
+										label="Only Included Servers"
+										subLabel="Whitelist — only color servers listed below."
+										icon={<TableRowAssetIcon name="PlusMediumIcon" />}
+										value="include"
+									/>
+									<TableRadioRow
+										label="Exclude Listed Servers"
+										subLabel="Blacklist — skip servers listed below."
+										icon={<TableRowAssetIcon name="DenyIcon" />}
+										value="exclude"
+									/>
+								</TableRadioGroup>
+							)}
+
+							{settings.applyInServers &&
+								settings.serverFilterMode !== 'all' && (
+									<TableRowGroup
+										title={
+											settings.serverFilterMode === 'include'
+												? `Included Servers (${parsedServerCount})`
+												: `Excluded Servers (${parsedServerCount})`
+										}
+									>
+										<TableRow
+											label={
+												<Stack spacing={12}>
+													<TextArea
+														label="Server IDs (one per line)"
+														description="Paste <guildId> or plain IDs, one per line. Trailing // comments are ignored."
+														value={filterDraft}
+														placeholder={
+															'<1006631131665399858> // Cool Z0ne\n<718433475828645928>'
+														}
+														style={{ height: 120 }}
+														onChange={updateFilterList}
+													/>
+													<View style={{ flexDirection: 'row', gap: 10 }}>
+														<View style={{ flex: 1 }}>
+															<Button
+																variant="primary"
+																size="md"
+																icon={magicDoorIconId}
+																text="Add from my Servers"
+																onPress={openServerPicker}
+															/>
+														</View>
+														<View style={{ flex: 0.45 }}>
+															<Button
+																variant="secondary"
+																size="md"
+																text="Clear"
+																disabled={!filterDraft}
+																onPress={() => updateFilterList('')}
+															/>
+														</View>
+													</View>
+												</Stack>
+											}
+										/>
+									</TableRowGroup>
+								)}
+
+							<TableRadioGroup<ColorStyle>
+								title="Color Style"
+								value={settings.colorStyle}
+								onChange={colorStyle => api.jsonStorage.set({ colorStyle })}
+							>
+								<TableRadioRow
+									label="Normal Single Colors"
+									subLabel="Classic solid IRC color per user."
+									value="solid"
+								/>
+								<TableRadioRow
+									label="Gradients"
+									subLabel="Smooth multi-stop gradient derived from each user's hash."
+									value="gradient"
+								/>
+							</TableRadioGroup>
+
+							<TableRowGroup title="Color Tuning">
 								<TableRow
 									label={
-										<Stack spacing={10}>
-											<Text variant="text-md/semibold">
-												Reload Discord to apply to open chats
-											</Text>
-											<Text variant="text-sm/normal" color="text-muted">
-												Already-loaded messages keep cached colors until reload.
-												Your saved settings are preserved.
-											</Text>
+										<Stack spacing={14}>
+											<View
+												style={{
+													flexDirection: 'row',
+													alignItems: 'center',
+													justifyContent: 'space-between',
+												}}
+											>
+												<Text variant="text-md/semibold">Saturation</Text>
+												<Text variant="text-md/medium" color="text-muted">
+													{activeSat}%
+												</Text>
+											</View>
+											<Slider
+												minimumValue={0}
+												maximumValue={100}
+												step={1}
+												value={activeSat}
+												onValueChange={val => setDragSat(Math.round(val))}
+												onSlidingComplete={setSat}
+												startIcon={
+													<Pressable onPress={() => setSat(activeSat - 5)}>
+														<TableRowAssetIcon name="CircleMinusIcon-primary" />
+													</Pressable>
+												}
+												endIcon={
+													<Pressable onPress={() => setSat(activeSat + 5)}>
+														<TableRowAssetIcon name="CirclePlusIcon-primary" />
+													</Pressable>
+												}
+											/>
+
+											<View
+												style={{
+													flexDirection: 'row',
+													alignItems: 'center',
+													justifyContent: 'space-between',
+													paddingTop: 4,
+												}}
+											>
+												<Text variant="text-md/semibold">Lightness</Text>
+												<Text variant="text-md/medium" color="text-muted">
+													{activeLight}%
+												</Text>
+											</View>
+											<Slider
+												minimumValue={0}
+												maximumValue={100}
+												step={1}
+												value={activeLight}
+												onValueChange={val => setDragLight(Math.round(val))}
+												onSlidingComplete={setLight}
+												startIcon={
+													<Pressable onPress={() => setLight(activeLight - 5)}>
+														<TableRowAssetIcon name="CircleMinusIcon-primary" />
+													</Pressable>
+												}
+												endIcon={
+													<Pressable onPress={() => setLight(activeLight + 5)}>
+														<TableRowAssetIcon name="CirclePlusIcon-primary" />
+													</Pressable>
+												}
+											/>
+
 											<Button
-												variant={'experimental_premium-primary' as any}
+												variant="secondary"
 												size="md"
-												icon={refreshIconId}
-												text="Reload Discord"
-												onPress={reloadApp}
+												text="Reset colors to default"
+												disabled={
+													activeSat === DEFAULT_SETTINGS.saturation &&
+													activeLight === DEFAULT_SETTINGS.lightness
+												}
+												onPress={() => {
+													setDragSat(null)
+													setDragLight(null)
+													api.jsonStorage.set({
+														saturation: DEFAULT_SETTINGS.saturation,
+														lightness: DEFAULT_SETTINGS.lightness,
+													})
+												}}
 											/>
 										</Stack>
 									}
 								/>
 							</TableRowGroup>
-						)}
 
-						<TableRowGroup title="Where to Apply">
-							<TableSwitchRow
-								label="Color users in DMs"
-								subLabel="Give every participant a unique color in DMs and group chats."
-								icon={<TableRowAssetIcon name="ForumIcon" />}
-								value={settings.applyInDms}
-								onValueChange={applyInDms =>
-									api.jsonStorage.set({ applyInDms })
-								}
-							/>
-							<TableSwitchRow
-								label="Color users in Servers"
-								subLabel="Apply unique IRC colors to usernames in server chats."
-								icon={<TableRowAssetIcon name="HashmarkIcon" />}
-								value={settings.applyInServers}
-								onValueChange={applyInServers =>
-									api.jsonStorage.set({ applyInServers })
-								}
-							/>
-							<TableSwitchRow
-								label="Member List"
-								subLabel="Apply IRC colors to usernames in the member list."
-								icon={<TableRowAssetIcon name="TopicsIcon" />}
-								value={settings.memberListColors}
-								onValueChange={memberListColors =>
-									api.jsonStorage.set({ memberListColors })
-								}
-							/>
-						</TableRowGroup>
-
-						{settings.applyInServers && (
-							<TableRadioGroup<ServerColorMode>
-								title="Server Mode"
-								value={settings.serverColorMode}
-								onChange={serverColorMode =>
-									api.jsonStorage.set({ serverColorMode })
-								}
-							>
-								<TableRadioRow
-									label="Only users without role colors"
-									subLabel="Keep existing role colors and color everyone else."
-									value="no-role-only"
-								/>
-								<TableRadioRow
-									label="Color everyone in servers"
-									subLabel="Override existing server role colors with IRC colors."
-									value="everyone"
-								/>
-							</TableRadioGroup>
-						)}
-
-						{settings.applyInServers && (
-							<TableRadioGroup<ServerFilterMode>
-								title="Server Filter"
-								value={settings.serverFilterMode}
-								onChange={serverFilterMode =>
-									api.jsonStorage.set({ serverFilterMode })
-								}
-							>
-								<TableRadioRow
-									label="All Servers"
-									subLabel="Apply across every server you are in."
-									icon={<TableRowAssetIcon name="HashmarkIcon" />}
-									value="all"
-								/>
-								<TableRadioRow
-									label="Only Included Servers"
-									subLabel="Whitelist — only color servers listed below."
-									icon={<TableRowAssetIcon name="PlusMediumIcon" />}
-									value="include"
-								/>
-								<TableRadioRow
-									label="Exclude Listed Servers"
-									subLabel="Blacklist — skip servers listed below."
-									icon={<TableRowAssetIcon name="DenyIcon" />}
-									value="exclude"
-								/>
-							</TableRadioGroup>
-						)}
-
-						{settings.applyInServers && settings.serverFilterMode !== 'all' && (
-							<TableRowGroup
-								title={
-									settings.serverFilterMode === 'include'
-										? `Included Servers (${parsedServerCount})`
-										: `Excluded Servers (${parsedServerCount})`
-								}
-							>
+							<TableRowGroup title="Seed & Shuffle">
 								<TableRow
 									label={
 										<Stack spacing={12}>
-											<TextArea
-												label="Server IDs (one per line)"
-												description="Paste <guildId> or plain IDs, one per line. Trailing // comments are ignored."
-												value={filterDraft}
-												placeholder={
-													'<1006631131665399858> // Cool Z0ne\n<718433475828645928>'
-												}
-												style={{ height: 120 }}
-												onChange={updateFilterList}
-											/>
+											<Stack spacing={8}>
+												<Text variant="text-md/semibold">Color Seed</Text>
+												<View
+													style={{
+														flexDirection: 'row',
+														alignItems: 'center',
+														gap: 8,
+													}}
+												>
+													<View style={{ flex: 1 }}>
+														<TextInput
+															value={seedDraft}
+															placeholder="Default (empty)"
+															isClearable
+															onClear={() => setSeedDraft('')}
+															onChange={setSeedDraft}
+														/>
+													</View>
+													{settings.seed ? (
+														<CopySeedButton seed={settings.seed} />
+													) : null}
+												</View>
+												<Text variant="text-xs/normal" color="text-muted">
+													Type literally anything — numbers, gibberish, emojis,
+													existential dread.
+												</Text>
+											</Stack>
 											<View style={{ flexDirection: 'row', gap: 10 }}>
 												<View style={{ flex: 1 }}>
 													<Button
 														variant="primary"
 														size="md"
-														icon={magicDoorIconId}
-														text="Add from my Servers"
-														onPress={openServerPicker}
+														icon={diceIconId}
+														text="Shuffle Seed"
+														onPress={shuffleSeed}
 													/>
 												</View>
-												<View style={{ flex: 0.45 }}>
+												<View style={{ flex: 1 }}>
 													<Button
 														variant="secondary"
 														size="md"
-														text="Clear"
-														disabled={!filterDraft}
-														onPress={() => updateFilterList('')}
+														text="Reset"
+														disabled={!seedDraft}
+														onPress={resetSeedDraft}
 													/>
 												</View>
 											</View>
+											<Button
+												variant="expressive"
+												size="md"
+												icon={applyIconId}
+												text="Apply Seed"
+												disabled={!isSeedDirty}
+												onPress={applySeed}
+											/>
 										</Stack>
 									}
 								/>
 							</TableRowGroup>
-						)}
 
-						<TableRadioGroup<ColorStyle>
-							title="Color Style"
-							value={settings.colorStyle}
-							onChange={colorStyle => api.jsonStorage.set({ colorStyle })}
-						>
-							<TableRadioRow
-								label="Normal Single Colors"
-								subLabel="Classic solid IRC color per user."
-								value="solid"
-							/>
-							<TableRadioRow
-								label="Gradients"
-								subLabel="Smooth multi-stop gradient derived from each user's hash."
-								value="gradient"
-							/>
-						</TableRadioGroup>
+							<TableRowGroup title="Advanced">
+								<TableSwitchRow
+									label="Debug Logs"
+									subLabel="Write diagnostic logs for troubleshooting."
+									icon={<TableRowAssetIcon name="SlashBoxIcon" />}
+									value={settings.debugLogs}
+									onValueChange={debugLogs =>
+										api.jsonStorage.set({ debugLogs })
+									}
+								/>
+							</TableRowGroup>
 
-						<TableRowGroup title="Color Tuning">
-							<TableRow
-								label={
-									<Stack spacing={14}>
-										<View
-											style={{
-												flexDirection: 'row',
-												alignItems: 'center',
-												justifyContent: 'space-between',
-											}}
-										>
-											<Text variant="text-md/semibold">Saturation</Text>
-											<Text variant="text-md/medium" color="text-muted">
-												{activeSat}%
-											</Text>
-										</View>
-										<Slider
-											minimumValue={0}
-											maximumValue={100}
-											step={1}
-											value={activeSat}
-											onValueChange={val => setDragSat(Math.round(val))}
-											onSlidingComplete={setSat}
-											startIcon={
-												<Pressable onPress={() => setSat(activeSat - 5)}>
-													<TableRowAssetIcon name="CircleMinusIcon-primary" />
-												</Pressable>
-											}
-											endIcon={
-												<Pressable onPress={() => setSat(activeSat + 5)}>
-													<TableRowAssetIcon name="CirclePlusIcon-primary" />
-												</Pressable>
-											}
-										/>
-
-										<View
-											style={{
-												flexDirection: 'row',
-												alignItems: 'center',
-												justifyContent: 'space-between',
-												paddingTop: 4,
-											}}
-										>
-											<Text variant="text-md/semibold">Lightness</Text>
-											<Text variant="text-md/medium" color="text-muted">
-												{activeLight}%
-											</Text>
-										</View>
-										<Slider
-											minimumValue={0}
-											maximumValue={100}
-											step={1}
-											value={activeLight}
-											onValueChange={val => setDragLight(Math.round(val))}
-											onSlidingComplete={setLight}
-											startIcon={
-												<Pressable onPress={() => setLight(activeLight - 5)}>
-													<TableRowAssetIcon name="CircleMinusIcon-primary" />
-												</Pressable>
-											}
-											endIcon={
-												<Pressable onPress={() => setLight(activeLight + 5)}>
-													<TableRowAssetIcon name="CirclePlusIcon-primary" />
-												</Pressable>
-											}
-										/>
-
-										<Button
-											variant="secondary"
-											size="md"
-											text="Reset colors to default"
-											disabled={
-												activeSat === DEFAULT_SETTINGS.saturation &&
-												activeLight === DEFAULT_SETTINGS.lightness
-											}
-											onPress={() => {
-												setDragSat(null)
-												setDragLight(null)
-												api.jsonStorage.set({
-													saturation: DEFAULT_SETTINGS.saturation,
-													lightness: DEFAULT_SETTINGS.lightness,
-												})
-											}}
-										/>
-									</Stack>
-								}
-							/>
-						</TableRowGroup>
-
-						<TableRowGroup title="Seed & Shuffle">
-							<TableRow
-								label={
-									<Stack spacing={12}>
-										<Stack spacing={8}>
-											<Text variant="text-md/semibold">Color Seed</Text>
-											<View
-												style={{
-													flexDirection: 'row',
-													alignItems: 'center',
-													gap: 8,
-												}}
-											>
-												<View style={{ flex: 1 }}>
-													<TextInput
-														value={seedDraft}
-														placeholder="Default (empty)"
-														isClearable
-														onClear={() => setSeedDraft('')}
-														onChange={setSeedDraft}
-													/>
-												</View>
-												{settings.seed ? (
-													<CopySeedButton seed={settings.seed} />
-												) : null}
-											</View>
-											<Text variant="text-xs/normal" color="text-muted">
-												Type literally anything — numbers, gibberish, emojis,
-												existential dread.
-											</Text>
-										</Stack>
-										<View style={{ flexDirection: 'row', gap: 10 }}>
-											<View style={{ flex: 1 }}>
-												<Button
-													variant="primary"
-													size="md"
-													icon={diceIconId}
-													text="Shuffle Seed"
-													onPress={shuffleSeed}
-												/>
-											</View>
-											<View style={{ flex: 1 }}>
-												<Button
-													variant="secondary"
-													size="md"
-													text="Reset"
-													disabled={!seedDraft}
-													onPress={resetSeedDraft}
-												/>
-											</View>
-										</View>
-										<Button
-											variant="expressive"
-											size="md"
-											icon={applyIconId}
-											text="Apply Seed"
-											disabled={!isSeedDirty}
-											onPress={applySeed}
-										/>
-									</Stack>
-								}
-							/>
-						</TableRowGroup>
-
-						<TableRowGroup title="Advanced">
-							<TableSwitchRow
-								label="Debug Logs"
-								subLabel="Write diagnostic logs for troubleshooting."
-								icon={<TableRowAssetIcon name="SlashBoxIcon" />}
-								value={settings.debugLogs}
-								onValueChange={debugLogs => api.jsonStorage.set({ debugLogs })}
-							/>
-						</TableRowGroup>
-
-						<View style={{ alignItems: 'center', paddingBottom: 16 }}>
-							<Text variant="text-xs/normal" color="text-muted">
-								IRC Colors v{formatVersion(api.plugin.manifest.version)}
-							</Text>
-						</View>
-					</Stack>
-				</ScrollView>
+							<View style={{ alignItems: 'center', paddingBottom: 16 }}>
+								<Text variant="text-xs/normal" color="text-muted">
+									IRC Colors v{formatVersion(api.plugin.manifest.version)}
+								</Text>
+							</View>
+						</Stack>
+					</ScrollView>
+				</LayerScope>
 			</Page>
 		)
 	},
