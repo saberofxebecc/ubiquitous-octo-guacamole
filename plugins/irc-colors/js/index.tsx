@@ -10,11 +10,13 @@ import {
 	ActionSheetActionCreators,
 	ToastActionCreators,
 } from '@valenced/discord/actions'
-import { Design } from '@valenced/discord/design'
+import { Design, FormRadio } from '@valenced/discord/design'
 import { Stores } from '@valenced/discord/flux'
 import { BottomSheet } from '@valenced/externals/gorhom'
 import { Clipboard } from '@valenced/externals/react-native-clipboard'
 import { JsonStorageUpdateMode } from '@valenced/json-storage'
+import { lookupModules } from '@valenced/modules/finders'
+import { withProps } from '@valenced/modules/finders/filters'
 import { reloadApp } from '@valenced/modules/native/app'
 import { formatVersion } from '@valenced/plugins/utils'
 import { React } from '@valenced/react'
@@ -29,7 +31,6 @@ import { getThemeStore } from './utils/stores'
 import type { JsonStorage } from '@valenced/json-storage'
 import type { PluginApi } from '@valenced/plugins/types'
 import type {
-	ColorAssignmentMode,
 	ColorStyle,
 	IrcColorsSettings,
 	ServerColorMode,
@@ -64,16 +65,37 @@ function getReloadSignature(s: IrcColorsSettings): string {
 	])
 }
 
+let cachedStarIcon: React.ComponentType<any> | null | undefined
+
+function getStarIcon(): React.ComponentType<any> | undefined {
+	if (cachedStarIcon !== undefined) return cachedStarIcon ?? undefined
+	const gen = lookupGeneratedIconComponent('StarIcon', 'StarIcon-primary')
+	if (gen) {
+		cachedStarIcon = gen
+		return gen
+	}
+	for (const [exp] of lookupModules<any>(withProps('StarIcon'))) {
+		if (typeof exp?.StarIcon === 'function') {
+			cachedStarIcon = exp.StarIcon
+			return exp.StarIcon
+		}
+	}
+	cachedStarIcon = null
+	return undefined
+}
+
 function RecommendBadge() {
 	const BadgeComp = (Design as any).Badge
 	if (!BadgeComp) return null
-	const StarIcon = lookupGeneratedIconComponent('StarIcon', 'StarIcon-primary')
+	const StarIcon = getStarIcon()
 	return (
-		<BadgeComp
-			variant="rarity-mythic"
-			type={{ text: 'Recommend' }}
-			{...(StarIcon ? { icon: StarIcon } : {})}
-		/>
+		<View style={{ alignSelf: 'flex-start', transform: [{ scale: 0.84 }] }}>
+			<BadgeComp
+				variant="rarity-mythic"
+				type={{ text: 'Recommended' }}
+				{...(StarIcon ? { icon: StarIcon } : {})}
+			/>
+		</View>
 	)
 }
 
@@ -582,7 +604,7 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 									<TableRadioRow
 										label="Only Included Servers"
 										subLabel="Whitelist — only color servers listed below."
-										icon={<TableRowAssetIcon name="PlusMediumIcon" />}
+										icon={<TableRowAssetIcon name="DoubleCheckmarkIcon" />}
 										value="include"
 									/>
 									<TableRadioRow
@@ -642,39 +664,60 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 									</TableRowGroup>
 								)}
 
-							<TableRadioGroup<ColorAssignmentMode>
-								title="Color Assignment"
-								value={settings.colorAssignment}
-								onChange={colorAssignment =>
-									api.jsonStorage.set({ colorAssignment })
-								}
-							>
-								<TableRadioRow
-									label="Smart Per-Chat"
-									subLabel={
-										<Stack spacing={6}>
-											<View style={{ alignSelf: 'flex-start' }}>
-												<RecommendBadge />
-											</View>
-											<Text variant="text-sm/normal" color="text-muted">
-												Spaces participants apart inside each DM, Group Chat,
-												and Server.
-											</Text>
-										</Stack>
+							<TableRowGroup title="Color Assignment">
+								<TableRow
+									label={
+										<View
+											style={{
+												flexDirection: 'row',
+												alignItems: 'center',
+												gap: 8,
+												flexWrap: 'wrap',
+											}}
+										>
+											<Text variant="text-md/semibold">Smart Per-Chat</Text>
+											<RecommendBadge />
+										</View>
 									}
-									value="per-context"
+									subLabel="Spaces participants apart inside each DM, Group Chat, and Server."
+									onPress={() =>
+										api.jsonStorage.set({ colorAssignment: 'per-context' })
+									}
+									trailing={
+										<FormRadio
+											selected={settings.colorAssignment === 'per-context'}
+										/>
+									}
 								/>
-								<TableRadioRow
+								<TableRow
 									label="Smart DMs, Global Servers"
 									subLabel="Spaces DMs and Group Chats, with one global color per user across servers."
-									value="dm-context-guild-global"
+									onPress={() =>
+										api.jsonStorage.set({
+											colorAssignment: 'dm-context-guild-global',
+										})
+									}
+									trailing={
+										<FormRadio
+											selected={
+												settings.colorAssignment === 'dm-context-guild-global'
+											}
+										/>
+									}
 								/>
-								<TableRadioRow
+								<TableRow
 									label="Classic Global"
 									subLabel="Every user keeps the same hash-based color everywhere."
-									value="global"
+									onPress={() =>
+										api.jsonStorage.set({ colorAssignment: 'global' })
+									}
+									trailing={
+										<FormRadio
+											selected={settings.colorAssignment === 'global'}
+										/>
+									}
 								/>
-							</TableRadioGroup>
+							</TableRowGroup>
 
 							<TableRadioGroup<ColorStyle>
 								title="Color Style"
@@ -740,7 +783,7 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 												}}
 											>
 												<Text variant="text-md/semibold">Saturation</Text>
-												<Text variant="text-md/medium" color="text-muted">
+												<Text variant="text-sm/medium" color="text-muted">
 													{settings.dynamicToneVariety
 														? `${activeSat}% (-20/+10%)`
 														: `${activeSat}%`}
@@ -774,7 +817,7 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 												}}
 											>
 												<Text variant="text-md/semibold">Lightness</Text>
-												<Text variant="text-md/medium" color="text-muted">
+												<Text variant="text-sm/medium" color="text-muted">
 													{settings.dynamicToneVariety
 														? `${activeLight}% (±12%)`
 														: `${activeLight}%`}
