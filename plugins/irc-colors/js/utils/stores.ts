@@ -17,6 +17,12 @@ export function getSelectedChannelStore() {
 	}
 }
 
+export function getThemeStore() {
+	return Stores.ThemeStore as {
+		theme?: string
+	}
+}
+
 export function getUserStore() {
 	return Stores.UserStore as {
 		getCurrentUser?(): { id?: string } | undefined

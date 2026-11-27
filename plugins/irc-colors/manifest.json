@@ -5,7 +5,7 @@
 	"description": "Assigns deterministic IRC-style username colors in DMs, servers, and the member list.",
 	"author": "Impala67 <791007955104432158> (https://github.com/saberofxebecc \"GitHub\")",
 	"icon": "BurgerIcon",
-	"version": "1.2.0",
+	"version": "1.2.1",
 	"dependencies": {
 		"valenced.api": {
 			"version": ">=1 <2"

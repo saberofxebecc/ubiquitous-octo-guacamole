@@ -2,7 +2,7 @@ import { getJsonStorage } from '@valenced/json-storage'
 import { lookupModule } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
 import { pluginStorageDirFor } from '@valenced/plugins/constants'
-import { getChannelStore, getUserStore } from './stores'
+import { getChannelStore, getThemeStore, getUserStore } from './stores'
 import type { JsonStorage } from '@valenced/json-storage'
 import type {
 	IrcColorsSettings,
@@ -33,9 +33,14 @@ const HUE_CURVE: readonly [number, number][] = [
 	[360, 360],
 ]
 
+interface ChannelPoolEntry {
+	members: string[]
+	initialCount: number
+}
+
 interface PoolFileData {
 	seed: string
-	channels: Record<string, string[]>
+	channels: Record<string, ChannelPoolEntry | string[]>
 }
 
 export interface ColorContext {
@@ -97,7 +102,7 @@ function schedulePoolSave() {
 		if (!poolStorage) return
 		const keys = Object.keys(poolData.channels)
 		if (keys.length > 150) {
-			const trimmed: Record<string, string[]> = {}
+			const trimmed: Record<string, ChannelPoolEntry | string[]> = {}
 			for (const k of keys.slice(-150)) trimmed[k] = poolData.channels[k]
 			poolData.channels = trimmed
 		}
@@ -296,121 +301,8 @@ function placeInLargestGap(placed: number[], hash: bigint): number {
 		}
 	}
 
-	// Small organic jitter within ±10% of the gap so positions aren't rigid
 	const jitterNorm = (Number((hash >> 12n) % 21n) - 10) / 100
 	return wrapDeg(bestStart + bestGap * (0.5 + jitterNorm))
-}
-
-function getDmPoolAngle(
-	channelId: string,
-	userId: string,
-	seed: string,
-): { angle: number; peerAngles: number[] } {
-	if (poolData.seed !== seed) {
-		poolData = { seed, channels: {} }
-		schedulePoolSave()
-	}
-
-	let order = poolData.channels[channelId]
-	let changed = false
-
-	if (!Array.isArray(order)) {
-		const ch = getChannelStore()?.getChannel?.(channelId)
-		const meId = getUserStore()?.getCurrentUser?.()?.id
-		const initial = new Set<string>()
-		if (Array.isArray(ch?.recipients)) {
-			for (const rid of ch.recipients) {
-				if (typeof rid === 'string' && rid.length > 0) initial.add(rid)
-			}
-		}
-		if (meId) initial.add(meId)
-		initial.add(userId)
-
-		// Sort initial members deterministically by channel+user+seed hash
-		order = Array.from(initial).sort((a, b) => {
-			const ha = xxhash64(`${channelId}|${a}|${seed}`)
-			const hb = xxhash64(`${channelId}|${b}|${seed}`)
-			return ha < hb ? -1 : ha > hb ? 1 : a.localeCompare(b)
-		})
-		poolData.channels[channelId] = order
-		changed = true
-	} else if (!order.includes(userId)) {
-		// Newcomer joins: append without changing existing participants' indices/colors
-		order = [...order, userId]
-		poolData.channels[channelId] = order
-		changed = true
-	}
-
-	if (changed) schedulePoolSave()
-
-	const baseAngle = Number(xxhash64(`base|${channelId}|${seed}`) % 360n)
-	const placed: number[] = [baseAngle]
-
-	for (let idx = 1; idx < order.length; idx++) {
-		const h = xxhash64(`${channelId}|${order[idx]}|${seed}`)
-		placed.push(placeInLargestGap(placed, h))
-	}
-
-	const userIdx = order.indexOf(userId)
-	const angle = placed[Math.max(userIdx, 0)]
-	const peerAngles = placed.filter((_, idx) => idx !== userIdx)
-	return { angle, peerAngles }
-}
-
-function getGuildPoolAngle(
-	guildId: string,
-	userId: string,
-	seed: string,
-): { angle: number; peerAngles: number[] } {
-	const key = `${seed}|${guildId}`
-	let pool = guildPools.get(key)
-	if (!pool) {
-		if (guildPools.size >= 40) {
-			const oldest = guildPools.keys().next().value
-			if (oldest !== undefined) guildPools.delete(oldest)
-		}
-		pool = new Map()
-		guildPools.set(key, pool)
-	}
-
-	const existing = pool.get(userId)
-	if (existing !== undefined) {
-		const peerAngles: number[] = []
-		for (const [uid, ang] of pool) {
-			if (uid !== userId) peerAngles.push(ang)
-		}
-		return { angle: existing, peerAngles }
-	}
-
-	const activeAngles = Array.from(pool.values()).slice(-28)
-	const baseHash = xxhash64(`${guildId}|${userId}|${seed}`)
-
-	let chosen = Number(baseHash % 360n)
-	if (activeAngles.length > 0) {
-		let bestMinDist = -1
-		for (let c = 0; c < 6; c++) {
-			const candidate = Number(
-				((baseHash >> BigInt(c * 9)) ^ BigInt(c * 97)) % 360n,
-			)
-			let minDist = 180
-			for (let i = 0; i < activeAngles.length; i++) {
-				const d = angularDist(candidate, activeAngles[i])
-				if (d < minDist) minDist = d
-			}
-			if (minDist > bestMinDist) {
-				bestMinDist = minDist
-				chosen = candidate
-			}
-		}
-	}
-
-	if (pool.size >= 120) {
-		const firstKey = pool.keys().next().value
-		if (firstKey !== undefined) pool.delete(firstKey)
-	}
-	pool.set(userId, chosen)
-
-	return { angle: chosen, peerAngles: activeAngles }
 }
 
 function pickGradientStop2(
@@ -418,7 +310,7 @@ function pickGradientStop2(
 	peerAngles: number[],
 	hash: bigint,
 ): number {
-	const baseShift = 95 + Number((hash >> 16n) % 55n) // 95..149° contrasting stop
+	const baseShift = 95 + Number((hash >> 16n) % 55n)
 	const baseDir = ((hash >> 24n) & 1n) === 0n ? 1 : -1
 
 	if (peerAngles.length === 0) {
@@ -448,19 +340,196 @@ function pickGradientStop2(
 	return best
 }
 
+function normalizePoolEntry(
+	raw: ChannelPoolEntry | string[] | undefined,
+): ChannelPoolEntry | null {
+	if (!raw) return null
+	if (Array.isArray(raw)) return { members: raw, initialCount: raw.length }
+	if (Array.isArray(raw.members)) {
+		return {
+			members: raw.members,
+			initialCount:
+				typeof raw.initialCount === 'number' && raw.initialCount > 0
+					? raw.initialCount
+					: raw.members.length,
+		}
+	}
+	return null
+}
+
+function getDmPoolAngles(
+	channelId: string,
+	userId: string,
+	seed: string,
+): { u1: number; u2: number } {
+	if (poolData.seed !== seed) {
+		poolData = { seed, channels: {} }
+		schedulePoolSave()
+	}
+
+	let entry = normalizePoolEntry(poolData.channels[channelId])
+	let changed = false
+
+	if (!entry) {
+		const ch = getChannelStore()?.getChannel?.(channelId)
+		const meId = getUserStore()?.getCurrentUser?.()?.id
+		const initial = new Set<string>()
+		if (Array.isArray(ch?.recipients)) {
+			for (const rid of ch.recipients) {
+				if (typeof rid === 'string' && rid.length > 0) initial.add(rid)
+			}
+		}
+		if (meId) initial.add(meId)
+		initial.add(userId)
+
+		const members = Array.from(initial).sort((a, b) => {
+			const ha = xxhash64(`${channelId}|${a}|${seed}`)
+			const hb = xxhash64(`${channelId}|${b}|${seed}`)
+			return ha < hb ? -1 : ha > hb ? 1 : a.localeCompare(b)
+		})
+		entry = { members, initialCount: members.length }
+		poolData.channels[channelId] = entry
+		changed = true
+	} else if (!entry.members.includes(userId)) {
+		entry = {
+			members: [...entry.members, userId],
+			initialCount: entry.initialCount,
+		}
+		poolData.channels[channelId] = entry
+		changed = true
+	}
+
+	if (changed) schedulePoolSave()
+
+	const { members, initialCount } = entry
+	const baseHash = xxhash64(`base|${channelId}|${seed}`)
+	const baseAngle = Number(baseHash % 360n)
+	const sectorDir = ((baseHash >> 10n) & 1n) === 0n ? 1 : -1
+
+	const placedStarts: number[] = []
+	const placedStops: { u1: number; u2: number }[] = []
+
+	const disjointCount = Math.min(initialCount, members.length)
+	if (initialCount >= 2 && initialCount <= 4) {
+		// Strict disjoint sectors for initial 2..4 members: zero gradient overlap
+		const sectorWidth = 360 / initialCount
+		const arcSpan = initialCount === 2 ? 70 : initialCount === 3 ? 55 : 42
+
+		for (let idx = 0; idx < disjointCount; idx++) {
+			const start = wrapDeg(baseAngle + idx * sectorWidth)
+			const stop = wrapDeg(start + sectorDir * arcSpan)
+			placedStarts.push(start)
+			placedStops.push({ u1: start, u2: stop })
+		}
+	} else if (disjointCount > 0) {
+		const firstStop = wrapDeg(baseAngle + sectorDir * 65)
+		placedStarts.push(baseAngle)
+		placedStops.push({ u1: baseAngle, u2: firstStop })
+
+		for (let idx = 1; idx < disjointCount; idx++) {
+			const h = xxhash64(`${channelId}|${members[idx]}|${seed}`)
+			const u1 = placeInLargestGap(placedStarts, h)
+			const u2 = pickGradientStop2(u1, placedStarts, h)
+			placedStarts.push(u1)
+			placedStops.push({ u1, u2 })
+		}
+	}
+
+	// Newcomers who joined after initial creation slot into largest gaps without shifting anyone else
+	for (let idx = disjointCount; idx < members.length; idx++) {
+		const h = xxhash64(`${channelId}|${members[idx]}|${seed}`)
+		const u1 = placeInLargestGap(placedStarts, h)
+		const u2 = pickGradientStop2(u1, placedStarts, h)
+		placedStarts.push(u1)
+		placedStops.push({ u1, u2 })
+	}
+
+	const userIdx = Math.max(members.indexOf(userId), 0)
+	return placedStops[userIdx]
+}
+
+function getGuildPoolAngles(
+	guildId: string,
+	userId: string,
+	seed: string,
+): { u1: number; u2: number } {
+	const key = `${seed}|${guildId}`
+	let pool = guildPools.get(key)
+	if (!pool) {
+		if (guildPools.size >= 40) {
+			const oldest = guildPools.keys().next().value
+			if (oldest !== undefined) guildPools.delete(oldest)
+		}
+		pool = new Map()
+		guildPools.set(key, pool)
+	}
+
+	const baseHash = xxhash64(`${guildId}|${userId}|${seed}`)
+	const existing = pool.get(userId)
+	if (existing !== undefined) {
+		const peerAngles: number[] = []
+		for (const [uid, ang] of pool) {
+			if (uid !== userId) peerAngles.push(ang)
+		}
+		return {
+			u1: existing,
+			u2: pickGradientStop2(existing, peerAngles, baseHash),
+		}
+	}
+
+	const activeAngles = Array.from(pool.values()).slice(-28)
+	let chosen = Number(baseHash % 360n)
+
+	if (activeAngles.length > 0) {
+		let bestMinDist = -1
+		for (let c = 0; c < 6; c++) {
+			const candidate = Number(
+				((baseHash >> BigInt(c * 9)) ^ BigInt(c * 97)) % 360n,
+			)
+			let minDist = 180
+			for (let i = 0; i < activeAngles.length; i++) {
+				const d = angularDist(candidate, activeAngles[i])
+				if (d < minDist) minDist = d
+			}
+			if (minDist > bestMinDist) {
+				bestMinDist = minDist
+				chosen = candidate
+			}
+		}
+	}
+
+	if (pool.size >= 120) {
+		const firstKey = pool.keys().next().value
+		if (firstKey !== undefined) pool.delete(firstKey)
+	}
+	pool.set(userId, chosen)
+
+	return { u1: chosen, u2: pickGradientStop2(chosen, activeAngles, baseHash) }
+}
+
 export function getUserIrcColor(
 	userId: string,
 	context: ColorContext,
 	settings: IrcColorsSettings,
 ): UserIrcColor {
-	const sat = clamp(Math.round(settings.saturation), 0, 100)
-	const light = clamp(Math.round(settings.lightness), 0, 100)
+	const isLightTheme = getThemeStore()?.theme === 'light'
+	const baseSat = clamp(
+		Math.round(isLightTheme ? settings.lightSaturation : settings.saturation),
+		0,
+		100,
+	)
+	const baseLight = clamp(
+		Math.round(isLightTheme ? settings.lightLightness : settings.lightness),
+		0,
+		100,
+	)
+	const dynamicTone = settings.dynamicToneVariety ?? true
 	const seed = settings.seed ?? ''
 	const mode = settings.colorAssignment ?? 'per-context'
 	const guildId = context.guildId ?? null
 	const channelId = context.channelId ?? null
 
-	const sig = `${seed}|${sat}|${light}|${mode}`
+	const sig = `${seed}|${isLightTheme ? 'L' : 'D'}|${baseSat}|${baseLight}|${dynamicTone ? 1 : 0}|${mode}`
 	if (sig !== cachedSig) {
 		colorCache.clear()
 		cachedSig = sig
@@ -482,26 +551,46 @@ export function getUserIrcColor(
 
 	const hash = xxhash64(`${userId}${seed}`)
 	let u1 = Number(hash % 360n)
-	let peerAngles: number[] = []
+	let u2 = pickGradientStop2(u1, [], hash)
 
 	if (mode !== 'global') {
 		if (!guildId && channelId) {
-			const dmRes = getDmPoolAngle(channelId, userId, seed)
-			u1 = dmRes.angle
-			peerAngles = dmRes.peerAngles
+			const dmRes = getDmPoolAngles(channelId, userId, seed)
+			u1 = dmRes.u1
+			u2 = dmRes.u2
 		} else if (guildId && mode === 'per-context') {
-			const guildRes = getGuildPoolAngle(guildId, userId, seed)
-			u1 = guildRes.angle
-			peerAngles = guildRes.peerAngles
+			const guildRes = getGuildPoolAngles(guildId, userId, seed)
+			u1 = guildRes.u1
+			u2 = guildRes.u2
 		}
 	}
 
-	const u2 = pickGradientStop2(u1, peerAngles, hash)
+	let sat1 = baseSat
+	let sat2 = baseSat
+	let light1 = baseLight
+	let light2 = baseLight
+
+	if (dynamicTone) {
+		const minL = Math.min(20, baseLight)
+		const maxL = Math.max(86, baseLight)
+		const minS = Math.min(35, baseSat)
+		const maxS = Math.max(100, baseSat)
+
+		const lightDelta = Number((hash >> 32n) % 25n) - 12 // -12..+12%
+		const satDelta = Number((hash >> 40n) % 31n) - 20 // -20..+10%
+		const sheenDir = ((hash >> 48n) & 1n) === 0n ? 1 : -1
+
+		light1 = clamp(baseLight + lightDelta, minL, maxL)
+		light2 = clamp(light1 + sheenDir * 5, minL, maxL)
+		sat1 = clamp(baseSat + satDelta, minS, maxS)
+		sat2 = clamp(sat1 - sheenDir * 5, minS, maxS)
+	}
+
 	const h1 = perceptualHue(u1)
 	const h2 = perceptualHue(u2)
 
-	const primaryHex = hslToHex(h1, sat, light)
-	const secondaryHex = hslToHex(h2, sat, light)
+	const primaryHex = hslToHex(h1, sat1, light1)
+	const secondaryHex = hslToHex(h2, sat2, light2)
 	const primaryInt = hexToInt(primaryHex)
 
 	const colorStrings: RoleColorStrings = {

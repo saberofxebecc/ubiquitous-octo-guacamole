@@ -1,6 +1,7 @@
 import { getAssetIdByName } from '@valenced/assets'
 import {
 	Checkbox,
+	FormSwitch,
 	Page,
 	SearchInput,
 	TableRowAssetIcon,
@@ -24,6 +25,7 @@ import { patchMemberList } from './patches/memberList'
 import { DEFAULT_SETTINGS } from './types'
 import { initColorPools } from './utils/colors'
 import { parseGuildIds, toggleGuildInList } from './utils/guildFilter'
+import { getThemeStore } from './utils/stores'
 import type { JsonStorage } from '@valenced/json-storage'
 import type { PluginApi } from '@valenced/plugins/types'
 import type {
@@ -40,6 +42,8 @@ const SEED_CHARS =
 
 let bootSignature: string | null = null
 let reloadToastTimer: ReturnType<typeof setTimeout> | undefined
+let hasShownReloadHint = false
+let skipNextReloadToast = false
 
 function getReloadSignature(s: IrcColorsSettings): string {
 	return JSON.stringify([
@@ -53,8 +57,24 @@ function getReloadSignature(s: IrcColorsSettings): string {
 		s.colorStyle,
 		Math.round(s.saturation),
 		Math.round(s.lightness),
+		Math.round(s.lightSaturation),
+		Math.round(s.lightLightness),
+		s.dynamicToneVariety,
 		s.seed,
 	])
+}
+
+function RecommendBadge() {
+	const BadgeComp = (Design as any).Badge
+	if (!BadgeComp) return null
+	const StarIcon = lookupGeneratedIconComponent('StarIcon', 'StarIcon-primary')
+	return (
+		<BadgeComp
+			variant="rarity-mythic"
+			type={{ text: 'Recommend' }}
+			{...(StarIcon ? { icon: StarIcon } : {})}
+		/>
+	)
 }
 
 function generateRandomSeed(): string {
@@ -108,6 +128,19 @@ function CopySeedButton({ seed }: { seed: string }) {
 	)
 }
 
+function showReloadRequiredToast() {
+	const InfoIcon = lookupGeneratedIconComponent(
+		'CircleInformationIcon',
+		'CircleInformationIcon-secondary',
+		'CircleInformationIcon-primary',
+	)
+	ToastActionCreators.open('irc-colors-reload-hint', {
+		text: 'Reload Required',
+		...(InfoIcon ? { icon: InfoIcon } : {}),
+		variant: 'default',
+	})
+}
+
 function showApplyToasts() {
 	clearReloadToastTimer()
 
@@ -116,18 +149,12 @@ function showApplyToasts() {
 		variant: 'success',
 	})
 
+	if (hasShownReloadHint) return
+	hasShownReloadHint = true
+
 	reloadToastTimer = setTimeout(() => {
 		reloadToastTimer = undefined
-		const InfoIcon = lookupGeneratedIconComponent(
-			'CircleInformationIcon',
-			'CircleInformationIcon-secondary',
-			'CircleInformationIcon-primary',
-		)
-		ToastActionCreators.open('irc-colors-reload-hint', {
-			text: 'Reload Required',
-			...(InfoIcon ? { icon: InfoIcon } : {}),
-			variant: 'default',
-		})
+		showReloadRequiredToast()
 	}, 2500)
 }
 
@@ -255,6 +282,8 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 		})
 
 		bootSignature = null
+		hasShownReloadHint = false
+		skipNextReloadToast = false
 		const syncBootSignature = () => {
 			bootSignature = getReloadSignature(getSettings())
 		}
@@ -272,6 +301,19 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 			jsonStorage.subscribe((_update, mode) => {
 				if (mode === JsonStorageUpdateMode.Load) {
 					syncBootSignature()
+					return
+				}
+				if (skipNextReloadToast) {
+					skipNextReloadToast = false
+					return
+				}
+				if (
+					!hasShownReloadHint &&
+					bootSignature !== null &&
+					getReloadSignature(getSettings()) !== bootSignature
+				) {
+					hasShownReloadHint = true
+					showReloadRequiredToast()
 				}
 			}),
 		)
@@ -312,6 +354,8 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 			TableRadioGroup,
 			TableRadioRow,
 			TableRow,
+			Tabs,
+			useSegmentedControlState,
 			Slider,
 			Stack,
 			Button,
@@ -321,13 +365,41 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 		} = Design
 
 		const settings = { ...DEFAULT_SETTINGS, ...api.jsonStorage.use() }
+		const isLightActive = getThemeStore()?.theme === 'light'
+		const defaultTab = isLightActive ? 1 : 0
 
+		const [tuningTab, setTuningTab] = React.useState<number>(defaultTab)
+		const [tabWidth, setTabWidth] = React.useState<number>(320)
 		const [dragSat, setDragSat] = React.useState<number | null>(null)
 		const [dragLight, setDragLight] = React.useState<number | null>(null)
 		const [seedDraft, setSeedDraft] = React.useState<string>(settings.seed)
 		const [filterDraft, setFilterDraft] = React.useState<string>(
 			settings.serverFilterList,
 		)
+
+		const tuningItems = React.useMemo(
+			() => [
+				{ id: 'dark', label: 'Dark Themes' },
+				{ id: 'light', label: 'Light Theme' },
+			],
+			[],
+		)
+
+		const tuningTabState = useSegmentedControlState({
+			items: tuningItems,
+			pageWidth: tabWidth,
+			defaultIndex: defaultTab,
+			onSetActiveIndex: index => {
+				setDragSat(null)
+				setDragLight(null)
+				setTuningTab(index)
+			},
+			onPageChange: index => {
+				setDragSat(null)
+				setDragLight(null)
+				setTuningTab(index)
+			},
+		})
 
 		React.useEffect(() => {
 			setSeedDraft(settings.seed)
@@ -342,20 +414,42 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 		const refreshIconId = getAssetIdByName('RefreshIcon')
 		const applyIconId = getAssetIdByName('CircleCheckIcon')
 
-		const activeSat = Math.round(dragSat ?? settings.saturation)
-		const activeLight = Math.round(dragLight ?? settings.lightness)
+		const isEditingLightTab = tuningTab === 1
+		const savedTabSat = isEditingLightTab
+			? settings.lightSaturation
+			: settings.saturation
+		const savedTabLight = isEditingLightTab
+			? settings.lightLightness
+			: settings.lightness
+		const defaultTabSat = isEditingLightTab
+			? DEFAULT_SETTINGS.lightSaturation
+			: DEFAULT_SETTINGS.saturation
+		const defaultTabLight = isEditingLightTab
+			? DEFAULT_SETTINGS.lightLightness
+			: DEFAULT_SETTINGS.lightness
+
+		const activeSat = Math.round(dragSat ?? savedTabSat)
+		const activeLight = Math.round(dragLight ?? savedTabLight)
 		const parsedServerCount = parseGuildIds(filterDraft).size
 
 		const setSat = (val: number) => {
 			const clamped = Math.max(0, Math.min(100, Math.round(val)))
 			setDragSat(null)
-			api.jsonStorage.set({ saturation: clamped })
+			api.jsonStorage.set(
+				isEditingLightTab
+					? { lightSaturation: clamped }
+					: { saturation: clamped },
+			)
 		}
 
 		const setLight = (val: number) => {
 			const clamped = Math.max(0, Math.min(100, Math.round(val)))
 			setDragLight(null)
-			api.jsonStorage.set({ lightness: clamped })
+			api.jsonStorage.set(
+				isEditingLightTab
+					? { lightLightness: clamped }
+					: { lightness: clamped },
+			)
 		}
 
 		const needsReload =
@@ -363,6 +457,7 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 		const isSeedDirty = seedDraft !== settings.seed
 
 		const applySeed = () => {
+			skipNextReloadToast = true
 			api.jsonStorage.set({ seed: seedDraft })
 			showApplyToasts()
 		}
@@ -391,33 +486,34 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 		return (
 			<Page>
 				<LayerScope zIndex={100}>
-					<ScrollView showsVerticalScrollIndicator={false}>
+					{needsReload && (
+						<View style={{ paddingBottom: 14 }}>
+							<TableRowGroup title="Reload Recommended">
+								<TableRow
+									label={
+										<Stack spacing={10}>
+											<Text variant="text-md/semibold">
+												Reload Discord to apply to open chats
+											</Text>
+											<Text variant="text-sm/normal" color="text-muted">
+												Already-loaded messages keep cached colors until reload.
+												Your saved settings are preserved.
+											</Text>
+											<Button
+												variant={'experimental_premium-primary' as any}
+												size="md"
+												icon={refreshIconId}
+												text="Reload Discord"
+												onPress={reloadApp}
+											/>
+										</Stack>
+									}
+								/>
+							</TableRowGroup>
+						</View>
+					)}
+					<ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
 						<Stack spacing={20}>
-							{needsReload && (
-								<TableRowGroup title="Reload Recommended">
-									<TableRow
-										label={
-											<Stack spacing={10}>
-												<Text variant="text-md/semibold">
-													Reload Discord to apply to open chats
-												</Text>
-												<Text variant="text-sm/normal" color="text-muted">
-													Already-loaded messages keep cached colors until
-													reload. Your saved settings are preserved.
-												</Text>
-												<Button
-													variant={'experimental_premium-primary' as any}
-													size="md"
-													icon={refreshIconId}
-													text="Reload Discord"
-													onPress={reloadApp}
-												/>
-											</Stack>
-										}
-									/>
-								</TableRowGroup>
-							)}
-
 							<TableRowGroup title="Where to Apply">
 								<TableSwitchRow
 									label="Color users in DMs"
@@ -554,8 +650,18 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 								}
 							>
 								<TableRadioRow
-									label="Smart Per-Chat (Recommended)"
-									subLabel="Spaces participants apart inside each DM, Group Chat, and Server."
+									label="Smart Per-Chat"
+									subLabel={
+										<Stack spacing={6}>
+											<View style={{ alignSelf: 'flex-start' }}>
+												<RecommendBadge />
+											</View>
+											<Text variant="text-sm/normal" color="text-muted">
+												Spaces participants apart inside each DM, Group Chat,
+												and Server.
+											</Text>
+										</Stack>
+									}
 									value="per-context"
 								/>
 								<TableRadioRow
@@ -590,7 +696,42 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 							<TableRowGroup title="Color Tuning">
 								<TableRow
 									label={
+										<View
+											style={{
+												flexDirection: 'row',
+												alignItems: 'center',
+												gap: 8,
+												flexWrap: 'wrap',
+											}}
+										>
+											<Text variant="text-md/semibold">
+												Dynamic Tone Variety
+											</Text>
+											<RecommendBadge />
+										</View>
+									}
+									subLabel="Varies saturation and lightness slightly around your sliders to prevent collisions."
+									trailing={
+										<FormSwitch
+											value={settings.dynamicToneVariety}
+											onValueChange={dynamicToneVariety =>
+												api.jsonStorage.set({ dynamicToneVariety })
+											}
+										/>
+									}
+								/>
+								<TableRow
+									label={
 										<Stack spacing={14}>
+											<View
+												onLayout={e => {
+													const w = e.nativeEvent.layout.width
+													if (w > 0 && w !== tabWidth) setTabWidth(w)
+												}}
+											>
+												<Tabs state={tuningTabState} grow />
+											</View>
+
 											<View
 												style={{
 													flexDirection: 'row',
@@ -600,7 +741,9 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 											>
 												<Text variant="text-md/semibold">Saturation</Text>
 												<Text variant="text-md/medium" color="text-muted">
-													{activeSat}%
+													{settings.dynamicToneVariety
+														? `${activeSat}% (-20/+10%)`
+														: `${activeSat}%`}
 												</Text>
 											</View>
 											<Slider
@@ -632,7 +775,9 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 											>
 												<Text variant="text-md/semibold">Lightness</Text>
 												<Text variant="text-md/medium" color="text-muted">
-													{activeLight}%
+													{settings.dynamicToneVariety
+														? `${activeLight}% (±12%)`
+														: `${activeLight}%`}
 												</Text>
 											</View>
 											<Slider
@@ -657,18 +802,31 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 											<Button
 												variant="secondary"
 												size="md"
-												text="Reset colors to default"
+												text={
+													isEditingLightTab
+														? 'Reset Light Theme defaults'
+														: 'Reset Dark Theme defaults'
+												}
 												disabled={
-													activeSat === DEFAULT_SETTINGS.saturation &&
-													activeLight === DEFAULT_SETTINGS.lightness
+													activeSat === defaultTabSat &&
+													activeLight === defaultTabLight
 												}
 												onPress={() => {
 													setDragSat(null)
 													setDragLight(null)
-													api.jsonStorage.set({
-														saturation: DEFAULT_SETTINGS.saturation,
-														lightness: DEFAULT_SETTINGS.lightness,
-													})
+													api.jsonStorage.set(
+														isEditingLightTab
+															? {
+																	lightSaturation:
+																		DEFAULT_SETTINGS.lightSaturation,
+																	lightLightness:
+																		DEFAULT_SETTINGS.lightLightness,
+																}
+															: {
+																	saturation: DEFAULT_SETTINGS.saturation,
+																	lightness: DEFAULT_SETTINGS.lightness,
+																},
+													)
 												}}
 											/>
 										</Stack>

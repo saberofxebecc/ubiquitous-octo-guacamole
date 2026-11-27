@@ -17,6 +17,9 @@ export interface IrcColorsSettings {
 	colorStyle: ColorStyle
 	saturation: number
 	lightness: number
+	lightSaturation: number
+	lightLightness: number
+	dynamicToneVariety: boolean
 	seed: string
 	debugLogs: boolean
 }
@@ -32,6 +35,9 @@ export const DEFAULT_SETTINGS: IrcColorsSettings = {
 	colorStyle: 'solid',
 	saturation: 100,
 	lightness: 70,
+	lightSaturation: 95,
+	lightLightness: 42,
+	dynamicToneVariety: true,
 	seed: '',
 	debugLogs: false,
 }
