@@ -89,7 +89,13 @@ function RecommendBadge() {
 	if (!BadgeComp) return null
 	const StarIcon = getStarIcon()
 	return (
-		<View style={{ alignSelf: 'flex-start', transform: [{ scale: 0.84 }] }}>
+		<View
+			style={{
+				alignSelf: 'flex-start',
+				marginHorizontal: -6,
+				transform: [{ scale: 0.8 }],
+			}}
+		>
 			<BadgeComp
 				variant="rarity-mythic"
 				type={{ text: 'Recommended' }}
@@ -671,8 +677,7 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 											style={{
 												flexDirection: 'row',
 												alignItems: 'center',
-												gap: 8,
-												flexWrap: 'wrap',
+												gap: 6,
 											}}
 										>
 											<Text variant="text-md/semibold">Smart Per-Chat</Text>
@@ -743,8 +748,7 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 											style={{
 												flexDirection: 'row',
 												alignItems: 'center',
-												gap: 8,
-												flexWrap: 'wrap',
+												gap: 6,
 											}}
 										>
 											<Text variant="text-md/semibold">
