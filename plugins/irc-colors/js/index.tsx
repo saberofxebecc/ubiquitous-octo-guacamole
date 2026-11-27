@@ -93,7 +93,7 @@ function RecommendBadge() {
 			style={{
 				alignSelf: 'flex-start',
 				marginHorizontal: -6,
-				transform: [{ scale: 0.8 }],
+				transform: [{ scale: 0.76 }],
 			}}
 		>
 			<BadgeComp
@@ -228,8 +228,8 @@ function ServerPickerSheet({
 	const trimmed = query.trim().toLowerCase()
 	const filtered = trimmed
 		? guilds.filter(
-				g => g.name.toLowerCase().includes(trimmed) || g.id.includes(trimmed),
-			)
+			g => g.name.toLowerCase().includes(trimmed) || g.id.includes(trimmed),
+		)
 		: guilds
 
 	return (
@@ -864,15 +864,15 @@ export default plugin<{ jsonStorage: IrcColorsSettings }>({
 													api.jsonStorage.set(
 														isEditingLightTab
 															? {
-																	lightSaturation:
-																		DEFAULT_SETTINGS.lightSaturation,
-																	lightLightness:
-																		DEFAULT_SETTINGS.lightLightness,
-																}
+																lightSaturation:
+																	DEFAULT_SETTINGS.lightSaturation,
+																lightLightness:
+																	DEFAULT_SETTINGS.lightLightness,
+															}
 															: {
-																	saturation: DEFAULT_SETTINGS.saturation,
-																	lightness: DEFAULT_SETTINGS.lightness,
-																},
+																saturation: DEFAULT_SETTINGS.saturation,
+																lightness: DEFAULT_SETTINGS.lightness,
+															},
 													)
 												}}
 											/>
